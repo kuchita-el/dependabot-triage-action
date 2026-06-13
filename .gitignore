@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Test / coverage output
+coverage/
+*.lcov
+.vitest/
+
+# Build cache (NOTE: dist/ is committed — it is the bundled action output)
+.tsbuildinfo
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Local secrets (dotenv-style files)
+.env*
+!.env.example
+
+# mise local state (mise.toml itself IS committed)
+.mise.local.toml
