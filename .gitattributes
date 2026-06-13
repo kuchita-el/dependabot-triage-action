@@ -1,0 +1,4 @@
+# ncc バンドル成果物。コミットは必須（JS Action は dist を直接実行する）だが、
+# GitHub の diff/言語統計ではノイズになるため generated 扱いにする。
+dist/** linguist-generated=true
+dist/** -diff
