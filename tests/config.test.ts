@@ -130,4 +130,19 @@ describe('parseConfig', () => {
   it('AC6: boolean input が true/false 以外なら ConfigError を投げる', () => {
     expect(() => parseConfig(reader(minimal({ comment: 'yes' })))).toThrow(ConfigError);
   });
+
+  it('レビュー: パススルー文字列は trim される（dependency-type の silent failure 防止）', () => {
+    const cfg = parseConfig(reader(minimal({ 'dependency-type': '  direct:production\n' })));
+    expect(cfg.dependencyType).toBe('direct:production');
+  });
+
+  it('レビュー: 空白のみのパススルーは未指定（既定値）扱い', () => {
+    expect(parseConfig(reader(minimal({ 'label-high': '   ' }))).labelHigh).toBe('triage:fix-now');
+    expect(parseConfig(reader(minimal({ 'package-ecosystem': '  ' }))).packageEcosystem).toBe('');
+  });
+
+  it('レビュー: aggregate は大小文字非依存（bool と整合）', () => {
+    expect(parseConfig(reader(minimal({ aggregate: 'MAX' }))).aggregate).toBe('max');
+    expect(parseConfig(reader(minimal({ aggregate: 'Sum' }))).aggregate).toBe('sum');
+  });
 });

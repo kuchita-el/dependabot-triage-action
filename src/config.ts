@@ -57,9 +57,12 @@ function bool(read: InputReader, name: string, fallback: boolean): boolean {
   );
 }
 
-/** 文字列をそのまま読む。未指定なら既定値。 */
+/**
+ * 文字列を trim して読む。空白のみ（trim 後空）は未指定とみなし既定値。
+ * num/bool と trim 方針を揃え、比較キー（dependency-type 等）の silent failure を防ぐ。
+ */
 function str(read: InputReader, name: string, fallback = ''): string {
-  const raw = read(name);
+  const raw = read(name).trim();
   return raw === '' ? fallback : raw;
 }
 
@@ -73,7 +76,7 @@ function list(read: InputReader, name: string): string[] {
 
 /** aggregate をパース。未指定なら既定値。max/sum 以外は ConfigError。 */
 function aggregate(read: InputReader): AggregateMethod {
-  const raw = read('aggregate').trim();
+  const raw = read('aggregate').trim().toLowerCase();
   if (raw === '') return DEFAULTS.aggregate;
   if (raw === 'max' || raw === 'sum') return raw;
   throw new ConfigError(
