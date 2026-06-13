@@ -1,0 +1,120 @@
+name: 'Dependabot Vulnerability Triage'
+description: 'Dependabot PR の脆弱性をこのリポジトリ基準の深刻度へ畳み込み、ラベル付与とコメント upsert を行う'
+author: 'Kuchita El'
+branding:
+  icon: 'shield'
+  color: 'orange'
+
+inputs:
+  # --- 認証 ---
+  github-token:
+    description: 'Dependabot alerts を読取可能な PAT または App Token（GITHUB_TOKEN では security alert を読めない）'
+    required: true
+
+  # --- fetch-metadata パススルー（workflow 側で dependabot/fetch-metadata を先に実行し配線する） ---
+  dependency-names:
+    description: 'fetch-metadata の dependency-names（カンマ区切り・全件）'
+    required: false
+    default: ''
+  dependency-type:
+    description: 'fetch-metadata の dependency-type（direct:production | direct:development | indirect）'
+    required: false
+    default: ''
+  package-ecosystem:
+    description: 'fetch-metadata の package-ecosystem（npm, pip, ...）'
+    required: false
+    default: ''
+  previous-version:
+    description: 'fetch-metadata の previous-version'
+    required: false
+    default: ''
+  new-version:
+    description: 'fetch-metadata の new-version'
+    required: false
+    default: ''
+  dependency-group:
+    description: 'fetch-metadata の dependency-group（グループ PR 名。非グループは空）'
+    required: false
+    default: ''
+  alert-ghsa-id:
+    description: 'fetch-metadata（alert-lookup: true）の ghsa-id（先頭依存のみ）'
+    required: false
+    default: ''
+  alert-cvss:
+    description: 'fetch-metadata（alert-lookup: true）の cvss（先頭依存のみ）'
+    required: false
+    default: ''
+
+  # --- スコア重み・スコープ係数 ---
+  weight-cvss:
+    description: 'スコア式の CVSS 重み'
+    required: false
+    default: '0.6'
+  weight-epss:
+    description: 'スコア式の EPSS 重み'
+    required: false
+    default: '0.4'
+  scope-prod:
+    description: 'direct:production のスコープ係数'
+    required: false
+    default: '1.0'
+  scope-dev:
+    description: 'direct:development のスコープ係数'
+    required: false
+    default: '0.4'
+  scope-indirect:
+    description: 'indirect のスコープ係数'
+    required: false
+    default: '0.7'
+
+  # --- バケット閾値 / ラベル名 ---
+  threshold-high:
+    description: 'これ以上のスコアで high バケット'
+    required: false
+    default: '0.66'
+  threshold-mid:
+    description: 'これ以上のスコアで mid バケット'
+    required: false
+    default: '0.33'
+  label-high:
+    description: 'high バケットに付与するラベル名'
+    required: false
+    default: 'triage:fix-now'
+  label-mid:
+    description: 'mid バケットに付与するラベル名'
+    required: false
+    default: 'triage:review'
+  label-low:
+    description: 'low バケットに付与するラベル名'
+    required: false
+    default: 'triage:low-here'
+
+  # --- 集約・挙動トグル ---
+  aggregate:
+    description: 'PR 全体スコアの集約方式（max | sum）'
+    required: false
+    default: 'max'
+  comment:
+    description: 'コメント upsert を有効にするか'
+    required: false
+    default: 'true'
+  label:
+    description: 'ラベル付与を有効にするか'
+    required: false
+    default: 'true'
+  fail-on-error:
+    description: 'トリアージ失敗（API エラー等）時に setFailed するか'
+    required: false
+    default: 'false'
+
+outputs:
+  score:
+    description: 'PR 全体スコア（0..1）'
+  bucket:
+    description: 'バケット（high | mid | low | none）'
+  vulnerabilities:
+    description: '脆弱性詳細の JSON 配列'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
