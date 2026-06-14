@@ -101,7 +101,10 @@ export async function upsertComment(
   body: string,
 ): Promise<void> {
   const comments = await client.listIssueComments(issueNumber);
-  const existing = comments.find((c) => c.body.includes(MARKER));
+  // 本文先頭にマーカーがある自前コメントのみを厳密に同定する。
+  // includes だと引用返信（行頭 "> <!-- ... -->"）まで拾い、他者コメントを
+  // 上書きしてしまう恐れがあるため startsWith を使う。
+  const existing = comments.find((c) => c.body.startsWith(MARKER));
   if (existing) {
     await client.updateIssueComment(existing.id, body);
   } else {

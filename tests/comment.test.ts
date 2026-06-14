@@ -158,4 +158,12 @@ describe('upsertComment', () => {
     expect(client.createIssueComment).not.toHaveBeenCalled();
     expect(client.updateIssueComment).toHaveBeenCalledTimes(2);
   });
+
+  it('レビュー: 引用返信(行頭が > のマーカー)は自前コメントと誤認しない', async () => {
+    // GitHub の Quote reply は本文先頭が "> <!-- ... -->" になる。これを update しない。
+    const client = mockClient([{ id: 42, body: `> ${MARKER}\n> 引用された本文\n\n人間の返信` }]);
+    await upsertComment(client, 7, body);
+    expect(client.updateIssueComment).not.toHaveBeenCalled();
+    expect(client.createIssueComment).toHaveBeenCalledWith(7, body);
+  });
 });
