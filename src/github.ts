@@ -15,6 +15,56 @@ export interface IssueComment {
   body: string;
 }
 
+/** 突合（M2-2）に必要なフィールドへ正規化した Dependabot alert。 */
+export interface DependabotAlert {
+  ghsaId: string;
+  cveId: string | null;
+  severity: string;
+  /** CVSS（v4 優先・無ければ v3・どちらも無ければ 0）。 */
+  cvss: number;
+  ecosystem: string;
+  packageName: string;
+  /** 'runtime' | 'development' | null。 */
+  scope: string | null;
+  firstPatchedVersion: string | null;
+  vulnerableVersionRange: string;
+}
+
+/** octokit の alert レスポンス（型に無い v4 フィールドへ防御的アクセスするための最小形）。 */
+interface RawAlert {
+  security_advisory?: {
+    ghsa_id?: string;
+    cve_id?: string | null;
+    severity?: string;
+    cvss?: { score?: number | null } | null;
+    cvss_severities?: { cvss_v4?: { score?: number | null } | null } | null;
+  } | null;
+  security_vulnerability?: {
+    package?: { ecosystem?: string; name?: string } | null;
+    first_patched_version?: { identifier?: string } | null;
+    vulnerable_version_range?: string;
+  } | null;
+  dependency?: { scope?: string | null } | null;
+}
+
+/** 生 alert を DependabotAlert へ正規化。cvss は v4 優先で防御的に取る。 */
+function normalizeAlert(raw: RawAlert): DependabotAlert {
+  const adv = raw.security_advisory ?? {};
+  const vuln = raw.security_vulnerability ?? {};
+  const cvss = adv.cvss_severities?.cvss_v4?.score ?? adv.cvss?.score ?? 0;
+  return {
+    ghsaId: adv.ghsa_id ?? '',
+    cveId: adv.cve_id ?? null,
+    severity: adv.severity ?? '',
+    cvss,
+    ecosystem: vuln.package?.ecosystem ?? '',
+    packageName: vuln.package?.name ?? '',
+    scope: raw.dependency?.scope ?? null,
+    firstPatchedVersion: vuln.first_patched_version?.identifier ?? null,
+    vulnerableVersionRange: vuln.vulnerable_version_range ?? '',
+  };
+}
+
 /** octokit を隠蔽するコメント/ラベル CRUD アダプタ。 */
 export interface GithubClient {
   listIssueComments(issueNumber: number): Promise<IssueComment[]>;
@@ -24,6 +74,7 @@ export interface GithubClient {
   addLabels(issueNumber: number, names: string[]): Promise<void>;
   removeLabel(issueNumber: number, name: string): Promise<void>;
   ensureLabelExists(name: string, color: string, description: string): Promise<void>;
+  listOpenDependabotAlerts(): Promise<DependabotAlert[]>;
 }
 
 /** エラーが HTTP 404（未検出）か。 */
@@ -92,6 +143,15 @@ export function createGithubClient(octokit: GithubOctokit, repo: RepoRef): Githu
         }
         throw err;
       }
+    },
+
+    async listOpenDependabotAlerts() {
+      const alerts = await octokit.paginate(octokit.rest.dependabot.listAlertsForRepo, {
+        ...base,
+        state: 'open',
+        per_page: 100,
+      });
+      return (alerts as RawAlert[]).map(normalizeAlert);
     },
   };
 }

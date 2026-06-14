@@ -12,6 +12,7 @@ function mockClient(overrides: Partial<Record<keyof GithubClient, unknown>> = {}
     addLabels: vi.fn().mockResolvedValue(undefined),
     removeLabel: vi.fn().mockResolvedValue(undefined),
     ensureLabelExists: vi.fn().mockResolvedValue(undefined),
+    listOpenDependabotAlerts: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as GithubClient;
 }

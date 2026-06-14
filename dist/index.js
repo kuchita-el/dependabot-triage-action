@@ -30155,6 +30155,23 @@ function parseConfig(read) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createGithubClient = createGithubClient;
+/** 生 alert を DependabotAlert へ正規化。cvss は v4 優先で防御的に取る。 */
+function normalizeAlert(raw) {
+    const adv = raw.security_advisory ?? {};
+    const vuln = raw.security_vulnerability ?? {};
+    const cvss = adv.cvss_severities?.cvss_v4?.score ?? adv.cvss?.score ?? 0;
+    return {
+        ghsaId: adv.ghsa_id ?? '',
+        cveId: adv.cve_id ?? null,
+        severity: adv.severity ?? '',
+        cvss,
+        ecosystem: vuln.package?.ecosystem ?? '',
+        packageName: vuln.package?.name ?? '',
+        scope: raw.dependency?.scope ?? null,
+        firstPatchedVersion: vuln.first_patched_version?.identifier ?? null,
+        vulnerableVersionRange: vuln.vulnerable_version_range ?? '',
+    };
+}
 /** エラーが HTTP 404（未検出）か。 */
 function isNotFound(err) {
     return typeof err === 'object' && err !== null && err.status === 404;
@@ -30214,6 +30231,14 @@ function createGithubClient(octokit, repo) {
                 }
                 throw err;
             }
+        },
+        async listOpenDependabotAlerts() {
+            const alerts = await octokit.paginate(octokit.rest.dependabot.listAlertsForRepo, {
+                ...base,
+                state: 'open',
+                per_page: 100,
+            });
+            return alerts.map(normalizeAlert);
         },
     };
 }
