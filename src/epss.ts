@@ -42,8 +42,12 @@ export async function enrichWithEpss(
           return { ...v, cveIds: [], epss: 0, epssAvailable: false };
         }
         const epssMap = await deps.fetchEpss(cveIds);
-        const epss = Math.max(0, ...cveIds.map((cve) => epssMap[cve] ?? 0));
-        return { ...v, cveIds, epss, epssAvailable: true };
+        // EPSS(FIRST) は全 CVE を網羅しない。未収載 CVE は応答に現れないため、
+        // 「実際にスコアが取れた CVE」だけで判定する。1 件も無ければ epssAvailable=false
+        // とし、コメントで取得済み 0 と未取得（—）を区別できるようにする。
+        const scored = cveIds.filter((cve) => epssMap[cve] !== undefined);
+        const epss = scored.length > 0 ? Math.max(...scored.map((cve) => epssMap[cve]!)) : 0;
+        return { ...v, cveIds, epss, epssAvailable: scored.length > 0 };
       } catch {
         // 取得失敗は見逃し方向に倒さず、スコアは CVSS のみで継続させる
         // （epss=0）。失敗は当該 vuln に閉じ込め、全体は止めない。
