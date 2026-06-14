@@ -15,6 +15,7 @@ function vuln(p: Partial<Vulnerability> = {}): Vulnerability {
     cveIds: [],
     cvss: 9.0,
     epss: 0.5,
+    epssAvailable: true,
     severity: 'high',
     packageName: 'pkg',
     ecosystem: 'npm',
