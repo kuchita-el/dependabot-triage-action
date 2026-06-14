@@ -30,4 +30,6 @@ async function main(): Promise<void> {
   });
 }
 
-void main();
+// run() の内部 try/catch の外で投げられた例外（非 ConfigError 再送出・
+// 合成ルートの想定外 throw 等）も握り潰さず、必ず setFailed で締める。
+main().catch((err) => core.setFailed(err instanceof Error ? err.message : String(err)));
