@@ -92,6 +92,12 @@ describe('renderComment', () => {
     expect(out).toContain('0.33'); // thresholdMid
   });
 
+  it('レビュー: 脚注に PR スコアの [0,1] クランプを開示する（行スコアとの不一致説明）', () => {
+    const out = render([vuln()]);
+    expect(out).toMatch(/クランプ/);
+    expect(out).toContain('[0,1]');
+  });
+
   it('AC7: グループPRは注記が出る', () => {
     const out = render([vuln()], { 'dependency-group': 'prod-deps' });
     expect(out).toContain('prod-deps');

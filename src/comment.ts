@@ -35,7 +35,7 @@ function footnote(config: Config): string {
     'スコア = (w_cvss·cvss/10 + w_epss·epss)·scope。',
     `重み: w_cvss=${config.weightCvss}, w_epss=${config.weightEpss}。`,
     `スコープ係数: prod=${config.scopeProd} / dev=${config.scopeDev} / indirect=${config.scopeIndirect}。`,
-    `集約: ${config.aggregate}。`,
+    `集約: ${config.aggregate}（PR スコアは [0,1] にクランプ。各行スコアは未クランプの素値）。`,
     `閾値: high≥${config.thresholdHigh}, mid≥${config.thresholdMid}。`,
     '</sub>',
   ].join(' ');
