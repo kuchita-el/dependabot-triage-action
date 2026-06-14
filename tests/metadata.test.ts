@@ -64,6 +64,17 @@ describe('collectM1Vulnerabilities', () => {
     expect(collectM1Vulnerabilities(secCfg({ 'alert-cvss': 'n/a' }))[0]!.cvss).toBe(0);
   });
 
+  it('レビュー: cvss は契約 [0,10] にクランプする（誤設定の silent miss/不正表示を防ぐ）', () => {
+    // 過大値（例: 9.5 を 95 と誤入力）→ 10、severity も critical で整合
+    const over = collectM1Vulnerabilities(secCfg({ 'alert-cvss': '95' }))[0]!;
+    expect(over.cvss).toBe(10);
+    expect(over.severity).toBe('critical');
+    // 負値 → 0、severity none
+    const neg = collectM1Vulnerabilities(secCfg({ 'alert-cvss': '-1' }))[0]!;
+    expect(neg.cvss).toBe(0);
+    expect(neg.severity).toBe('none');
+  });
+
   it('AC6: severity を CVSS バンドから導出する', () => {
     expect(collectM1Vulnerabilities(secCfg({ 'alert-cvss': '9.5' }))[0]!.severity).toBe('critical');
     expect(collectM1Vulnerabilities(secCfg({ 'alert-cvss': '7.0' }))[0]!.severity).toBe('high');

@@ -23,11 +23,17 @@ function toScope(dependencyType: string): DependencyType {
   }
 }
 
-/** CVSS 文字列を数値へ。空・不正は 0。 */
+/**
+ * CVSS 文字列を数値へ。空・不正は 0。
+ * score.ts の入力契約（cvss∈[0,10]）をこの層で強制し、誤設定の範囲外値を
+ * [0,10] にクランプする（負値→0 / >10→10）。表示と severity の不整合・
+ * 見逃し方向の沈黙を防ぐ。
+ */
 function parseCvss(raw: string): number {
   if (raw.trim() === '') return 0;
   const value = Number(raw);
-  return Number.isFinite(value) ? value : 0;
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(10, Math.max(0, value));
 }
 
 /**
