@@ -35,13 +35,31 @@ export const DEFAULTS = {
   failOnError: false,
 } as const;
 
-/** 有限数値としてパース。未指定（空）なら既定値。不正なら ConfigError。 */
-function num(read: InputReader, name: string, fallback: number): number {
+/**
+ * 有限数値としてパース。未指定（空）なら既定値。不正なら ConfigError。
+ * min/max を渡すと範囲外を ConfigError とする（範囲外設定の silent misconfiguration を防ぐ）。
+ */
+function num(
+  read: InputReader,
+  name: string,
+  fallback: number,
+  range?: { min?: number; max?: number },
+): number {
   const raw = read(name).trim();
   if (raw === '') return fallback;
   const value = Number(raw);
   if (!Number.isFinite(value)) {
     throw new ConfigError(`input "${name}" は有限数値である必要があります（受領値: "${raw}"）`);
+  }
+  if (range?.min !== undefined && value < range.min) {
+    throw new ConfigError(
+      `input "${name}" は ${range.min} 以上である必要があります（受領値: "${raw}"）`,
+    );
+  }
+  if (range?.max !== undefined && value > range.max) {
+    throw new ConfigError(
+      `input "${name}" は ${range.max} 以下である必要があります（受領値: "${raw}"）`,
+    );
   }
   return value;
 }
@@ -96,6 +114,15 @@ export function parseConfig(read: InputReader): Config {
     );
   }
 
+  // 閾値は範囲（0..1）に加え high>=mid の順序整合も要る。順序検証のため先に確定する。
+  const thresholdHigh = num(read, 'threshold-high', DEFAULTS.thresholdHigh, { min: 0, max: 1 });
+  const thresholdMid = num(read, 'threshold-mid', DEFAULTS.thresholdMid, { min: 0, max: 1 });
+  if (thresholdHigh < thresholdMid) {
+    throw new ConfigError(
+      `input "threshold-high"(${thresholdHigh}) は "threshold-mid"(${thresholdMid}) 以上である必要があります`,
+    );
+  }
+
   return {
     githubToken,
 
@@ -106,14 +133,14 @@ export function parseConfig(read: InputReader): Config {
     newVersion: str(read, 'new-version'),
     dependencyGroup: str(read, 'dependency-group'),
 
-    weightCvss: num(read, 'weight-cvss', DEFAULTS.weightCvss),
-    weightEpss: num(read, 'weight-epss', DEFAULTS.weightEpss),
-    scopeProd: num(read, 'scope-prod', DEFAULTS.scopeProd),
-    scopeDev: num(read, 'scope-dev', DEFAULTS.scopeDev),
-    scopeIndirect: num(read, 'scope-indirect', DEFAULTS.scopeIndirect),
+    weightCvss: num(read, 'weight-cvss', DEFAULTS.weightCvss, { min: 0 }),
+    weightEpss: num(read, 'weight-epss', DEFAULTS.weightEpss, { min: 0 }),
+    scopeProd: num(read, 'scope-prod', DEFAULTS.scopeProd, { min: 0 }),
+    scopeDev: num(read, 'scope-dev', DEFAULTS.scopeDev, { min: 0 }),
+    scopeIndirect: num(read, 'scope-indirect', DEFAULTS.scopeIndirect, { min: 0 }),
 
-    thresholdHigh: num(read, 'threshold-high', DEFAULTS.thresholdHigh),
-    thresholdMid: num(read, 'threshold-mid', DEFAULTS.thresholdMid),
+    thresholdHigh,
+    thresholdMid,
     labelHigh: str(read, 'label-high', DEFAULTS.labelHigh),
     labelMid: str(read, 'label-mid', DEFAULTS.labelMid),
     labelLow: str(read, 'label-low', DEFAULTS.labelLow),

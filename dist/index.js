@@ -32889,14 +32889,23 @@ exports.DEFAULTS = {
     label: true,
     failOnError: false,
 };
-/** 有限数値としてパース。未指定（空）なら既定値。不正なら ConfigError。 */
-function num(read, name, fallback) {
+/**
+ * 有限数値としてパース。未指定（空）なら既定値。不正なら ConfigError。
+ * min/max を渡すと範囲外を ConfigError とする（範囲外設定の silent misconfiguration を防ぐ）。
+ */
+function num(read, name, fallback, range) {
     const raw = read(name).trim();
     if (raw === '')
         return fallback;
     const value = Number(raw);
     if (!Number.isFinite(value)) {
         throw new ConfigError(`input "${name}" は有限数値である必要があります（受領値: "${raw}"）`);
+    }
+    if (range?.min !== undefined && value < range.min) {
+        throw new ConfigError(`input "${name}" は ${range.min} 以上である必要があります（受領値: "${raw}"）`);
+    }
+    if (range?.max !== undefined && value > range.max) {
+        throw new ConfigError(`input "${name}" は ${range.max} 以下である必要があります（受領値: "${raw}"）`);
     }
     return value;
 }
@@ -32944,6 +32953,12 @@ function parseConfig(read) {
     if (githubToken === '') {
         throw new ConfigError('input "github-token" は必須です（Dependabot alerts を読取可能な PAT を指定してください）');
     }
+    // 閾値は範囲（0..1）に加え high>=mid の順序整合も要る。順序検証のため先に確定する。
+    const thresholdHigh = num(read, 'threshold-high', exports.DEFAULTS.thresholdHigh, { min: 0, max: 1 });
+    const thresholdMid = num(read, 'threshold-mid', exports.DEFAULTS.thresholdMid, { min: 0, max: 1 });
+    if (thresholdHigh < thresholdMid) {
+        throw new ConfigError(`input "threshold-high"(${thresholdHigh}) は "threshold-mid"(${thresholdMid}) 以上である必要があります`);
+    }
     return {
         githubToken,
         dependencyNames: list(read, 'dependency-names'),
@@ -32952,13 +32967,13 @@ function parseConfig(read) {
         previousVersion: str(read, 'previous-version'),
         newVersion: str(read, 'new-version'),
         dependencyGroup: str(read, 'dependency-group'),
-        weightCvss: num(read, 'weight-cvss', exports.DEFAULTS.weightCvss),
-        weightEpss: num(read, 'weight-epss', exports.DEFAULTS.weightEpss),
-        scopeProd: num(read, 'scope-prod', exports.DEFAULTS.scopeProd),
-        scopeDev: num(read, 'scope-dev', exports.DEFAULTS.scopeDev),
-        scopeIndirect: num(read, 'scope-indirect', exports.DEFAULTS.scopeIndirect),
-        thresholdHigh: num(read, 'threshold-high', exports.DEFAULTS.thresholdHigh),
-        thresholdMid: num(read, 'threshold-mid', exports.DEFAULTS.thresholdMid),
+        weightCvss: num(read, 'weight-cvss', exports.DEFAULTS.weightCvss, { min: 0 }),
+        weightEpss: num(read, 'weight-epss', exports.DEFAULTS.weightEpss, { min: 0 }),
+        scopeProd: num(read, 'scope-prod', exports.DEFAULTS.scopeProd, { min: 0 }),
+        scopeDev: num(read, 'scope-dev', exports.DEFAULTS.scopeDev, { min: 0 }),
+        scopeIndirect: num(read, 'scope-indirect', exports.DEFAULTS.scopeIndirect, { min: 0 }),
+        thresholdHigh,
+        thresholdMid,
         labelHigh: str(read, 'label-high', exports.DEFAULTS.labelHigh),
         labelMid: str(read, 'label-mid', exports.DEFAULTS.labelMid),
         labelLow: str(read, 'label-low', exports.DEFAULTS.labelLow),
