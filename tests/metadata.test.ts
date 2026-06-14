@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { collectM1Vulnerabilities } from '../src/metadata';
+import { collectM1Vulnerabilities, reconcileVulnerabilities } from '../src/metadata';
 import { parseConfig } from '../src/config';
+import type { DependabotAlert } from '../src/github';
 import type { Config } from '../src/types';
 
 function cfg(overrides: Record<string, string> = {}): Config {
@@ -81,5 +82,107 @@ describe('collectM1Vulnerabilities', () => {
     expect(collectM1Vulnerabilities(secCfg({ 'alert-cvss': '5.0' }))[0]!.severity).toBe('moderate');
     expect(collectM1Vulnerabilities(secCfg({ 'alert-cvss': '2.0' }))[0]!.severity).toBe('low');
     expect(collectM1Vulnerabilities(secCfg({ 'alert-cvss': '0' }))[0]!.severity).toBe('none');
+  });
+});
+
+function alert(p: Partial<DependabotAlert> = {}): DependabotAlert {
+  return {
+    ghsaId: 'GHSA-aaaa-bbbb-cccc',
+    cveId: 'CVE-2026-0001',
+    severity: 'high',
+    cvss: 7.5,
+    ecosystem: 'npm',
+    packageName: 'left-pad',
+    scope: 'runtime',
+    firstPatchedVersion: '1.3.0',
+    vulnerableVersionRange: '< 1.3.0',
+    ...p,
+  };
+}
+
+describe('reconcileVulnerabilities', () => {
+  it('AC1: dependency-names に名前一致する alert は Vulnerability になる', () => {
+    const vulns = reconcileVulnerabilities(cfg({ 'dependency-names': 'left-pad' }), [alert()]);
+    expect(vulns).toHaveLength(1);
+    expect(vulns[0]!.packageName).toBe('left-pad');
+  });
+
+  it('AC2: 名前一致しない alert は除外される', () => {
+    const vulns = reconcileVulnerabilities(cfg({ 'dependency-names': 'lodash' }), [
+      alert({ packageName: 'left-pad' }),
+    ]);
+    expect(vulns).toEqual([]);
+  });
+
+  it('AC3: 名前正規化(大文字小文字/前後空白)を跨いでマッチ', () => {
+    // dependency-names: 'Left-Pad'（config は trim のみ・大小は保持）、alert: ' left-pad '
+    const vulns = reconcileVulnerabilities(cfg({ 'dependency-names': 'Left-Pad' }), [
+      alert({ packageName: ' left-pad ' }),
+    ]);
+    expect(vulns).toHaveLength(1);
+  });
+
+  it('AC4: 複数マッチで複数 Vulnerability', () => {
+    const vulns = reconcileVulnerabilities(cfg({ 'dependency-names': 'left-pad, lodash' }), [
+      alert({ ghsaId: 'GHSA-1', packageName: 'left-pad' }),
+      alert({ ghsaId: 'GHSA-2', packageName: 'lodash' }),
+    ]);
+    expect(vulns).toHaveLength(2);
+  });
+
+  it('AC5: 同一 ghsaId は重複排除', () => {
+    const vulns = reconcileVulnerabilities(cfg({ 'dependency-names': 'left-pad' }), [
+      alert({ ghsaId: 'GHSA-dup', packageName: 'left-pad' }),
+      alert({ ghsaId: 'GHSA-dup', packageName: 'left-pad' }),
+    ]);
+    expect(vulns).toHaveLength(1);
+  });
+
+  it('AC6: 突合0件は []', () => {
+    expect(reconcileVulnerabilities(cfg({ 'dependency-names': 'left-pad' }), [])).toEqual([]);
+    expect(reconcileVulnerabilities(cfg(), [alert()])).toEqual([]); // dependency-names 空
+  });
+
+  it('AC7: 各フィールドを alert から正しくマップする', () => {
+    const [v] = reconcileVulnerabilities(cfg({ 'dependency-names': 'left-pad' }), [
+      alert({
+        ghsaId: 'GHSA-x',
+        cveId: 'CVE-2026-9999',
+        severity: 'critical',
+        cvss: 9.8,
+        ecosystem: 'npm',
+        packageName: 'left-pad',
+      }),
+    ]);
+    expect(v).toMatchObject({
+      ghsaId: 'GHSA-x',
+      cveIds: ['CVE-2026-9999'],
+      cvss: 9.8,
+      epss: 0,
+      epssAvailable: false,
+      severity: 'critical',
+      packageName: 'left-pad',
+      ecosystem: 'npm',
+    });
+  });
+
+  it('AC7: cveId が null なら cveIds=[]', () => {
+    const [v] = reconcileVulnerabilities(cfg({ 'dependency-names': 'left-pad' }), [
+      alert({ cveId: null }),
+    ]);
+    expect(v!.cveIds).toEqual([]);
+  });
+
+  it('AC8: alert.scope を DependencyType にマップ', () => {
+    const c = cfg({ 'dependency-names': 'left-pad' });
+    expect(reconcileVulnerabilities(c, [alert({ scope: 'runtime' })])[0]!.scope).toBe(
+      'direct:production',
+    );
+    expect(reconcileVulnerabilities(c, [alert({ scope: 'development' })])[0]!.scope).toBe(
+      'direct:development',
+    );
+    expect(reconcileVulnerabilities(c, [alert({ scope: null })])[0]!.scope).toBe(
+      'direct:production',
+    );
   });
 });
