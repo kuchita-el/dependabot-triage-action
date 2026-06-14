@@ -129,7 +129,10 @@ describe('evaluate', () => {
   });
 
   it('AC6: 負の重みでもスコアは 0 未満にならない', () => {
-    const r = evaluate([vuln({ cvss: 1.0, epss: 0.0 })], cfg({ 'weight-cvss': '-1' }));
+    // #36 で parseConfig は負の重みを弾くため、評価器の防御的下限（クランプ）は
+    // Config を直接構築して検証する（score.ts は parseConfig 以外からも呼ばれうる純粋関数）。
+    const c: Config = { ...cfg(), weightCvss: -1 };
+    const r = evaluate([vuln({ cvss: 1.0, epss: 0.0 })], c);
     expect(r.score).toBeGreaterThanOrEqual(0);
   });
 

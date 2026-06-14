@@ -141,4 +141,53 @@ describe('parseConfig', () => {
     expect(parseConfig(reader(minimal({ aggregate: 'MAX' }))).aggregate).toBe('max');
     expect(parseConfig(reader(minimal({ aggregate: 'Sum' }))).aggregate).toBe('sum');
   });
+
+  // --- #36: 数値範囲・整合性バリデーション ---
+
+  it('#36-1: 重み・スコープ係数に負値を与えると ConfigError', () => {
+    for (const name of ['weight-cvss', 'weight-epss', 'scope-prod', 'scope-dev', 'scope-indirect']) {
+      expect(() => parseConfig(reader(minimal({ [name]: '-0.1' })))).toThrow(ConfigError);
+    }
+  });
+
+  it('#36-1: 重み・スコープ係数の 0 は受理する（境界）', () => {
+    for (const name of ['weight-cvss', 'weight-epss', 'scope-prod', 'scope-dev', 'scope-indirect']) {
+      expect(() => parseConfig(reader(minimal({ [name]: '0' })))).not.toThrow();
+    }
+  });
+
+  it('#36-2: 閾値が 0 未満または 1 超なら ConfigError', () => {
+    expect(() => parseConfig(reader(minimal({ 'threshold-high': '-0.01' })))).toThrow(ConfigError);
+    expect(() => parseConfig(reader(minimal({ 'threshold-high': '1.01' })))).toThrow(ConfigError);
+    expect(() => parseConfig(reader(minimal({ 'threshold-mid': '-0.01' })))).toThrow(ConfigError);
+    expect(() =>
+      parseConfig(reader(minimal({ 'threshold-high': '1', 'threshold-mid': '1.01' }))),
+    ).toThrow(ConfigError);
+  });
+
+  it('#36-2: 閾値の境界 0 / 1 は受理する', () => {
+    expect(() =>
+      parseConfig(reader(minimal({ 'threshold-high': '1', 'threshold-mid': '0' }))),
+    ).not.toThrow();
+  });
+
+  it('#36-3: threshold-high < threshold-mid なら ConfigError', () => {
+    expect(() =>
+      parseConfig(reader(minimal({ 'threshold-high': '0.3', 'threshold-mid': '0.5' }))),
+    ).toThrow(ConfigError);
+  });
+
+  it('#36-3: threshold-high == threshold-mid は受理する（境界）', () => {
+    expect(() =>
+      parseConfig(reader(minimal({ 'threshold-high': '0.5', 'threshold-mid': '0.5' }))),
+    ).not.toThrow();
+  });
+
+  it('#36-4: 範囲違反の ConfigError は input 名と受領値を含む', () => {
+    expect(() => parseConfig(reader(minimal({ 'weight-cvss': '-2' })))).toThrow(/weight-cvss.*-2/);
+    expect(() => parseConfig(reader(minimal({ 'threshold-high': '5' })))).toThrow(/threshold-high.*5/);
+    expect(() =>
+      parseConfig(reader(minimal({ 'threshold-high': '0.2', 'threshold-mid': '0.4' }))),
+    ).toThrow(/threshold-high.*threshold-mid/);
+  });
 });
