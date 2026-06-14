@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { scopeFactor, scoreVulnerability, aggregateScores, toBucket, evaluate } from '../src/score';
 import { parseConfig } from '../src/config';
-import type { Config, Vulnerability } from '../src/types';
+import type { Config, DependencyType, Vulnerability } from '../src/types';
 
 /** 既定値 Config を作り、必要なら一部を上書きした reader でパースする。 */
 function cfg(overrides: Record<string, string> = {}): Config {
@@ -36,6 +36,12 @@ describe('scopeFactor', () => {
     expect(scopeFactor('direct:production', c)).toBe(0.9);
     expect(scopeFactor('direct:development', c)).toBe(0.2);
     expect(scopeFactor('indirect', c)).toBe(0.55);
+  });
+
+  it('レビュー: 未知スコープは最大係数（config 依存でも真の最悪ケース）', () => {
+    // scope-indirect を prod より大きくしても、未知は最大(2.0)を返す
+    const c = cfg({ 'scope-prod': '1.0', 'scope-dev': '0.4', 'scope-indirect': '2.0' });
+    expect(scopeFactor('unknown-scope' as unknown as DependencyType, c)).toBe(2.0);
   });
 });
 
@@ -124,5 +130,12 @@ describe('evaluate', () => {
   it('AC6: 負の重みでもスコアは 0 未満にならない', () => {
     const r = evaluate([vuln({ cvss: 1.0, epss: 0.0 })], cfg({ 'weight-cvss': '-1' }));
     expect(r.score).toBeGreaterThanOrEqual(0);
+  });
+
+  it('レビュー: cvss/epss が非有限なら throw する（NaN の silent-miss 防止）', () => {
+    expect(() => evaluate([vuln({ cvss: NaN })], cfg())).toThrow(/cvss|epss/);
+    expect(() => evaluate([vuln({ epss: Number.POSITIVE_INFINITY })], cfg())).toThrow(/cvss|epss/);
+    // 1 件でも非有限があれば全体を throw（silent に low へ落とさない）
+    expect(() => evaluate([vuln({ cvss: 9.0, epss: 0.5 }), vuln({ cvss: NaN })], cfg())).toThrow();
   });
 });
