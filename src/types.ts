@@ -57,8 +57,6 @@ export interface Config {
   previousVersion: string;
   newVersion: string;
   dependencyGroup: string;
-  alertGhsaId: string;
-  alertCvss: string;
 
   // --- スコア重み・スコープ係数 ---
   weightCvss: number;

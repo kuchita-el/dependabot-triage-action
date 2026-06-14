@@ -22,8 +22,6 @@ describe('parseConfig', () => {
         'previous-version': '1.0.0',
         'new-version': '1.2.3',
         'dependency-group': 'prod-deps',
-        'alert-ghsa-id': 'GHSA-aaaa-bbbb-cccc',
-        'alert-cvss': '9.8',
         'weight-cvss': '0.7',
         'weight-epss': '0.3',
         'scope-prod': '1.0',
@@ -48,8 +46,6 @@ describe('parseConfig', () => {
     expect(cfg.previousVersion).toBe('1.0.0');
     expect(cfg.newVersion).toBe('1.2.3');
     expect(cfg.dependencyGroup).toBe('prod-deps');
-    expect(cfg.alertGhsaId).toBe('GHSA-aaaa-bbbb-cccc');
-    expect(cfg.alertCvss).toBe('9.8');
     expect(cfg.weightCvss).toBe(0.7);
     expect(cfg.weightEpss).toBe(0.3);
     expect(cfg.scopeProd).toBe(1.0);

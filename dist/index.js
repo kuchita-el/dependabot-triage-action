@@ -30129,8 +30129,6 @@ function parseConfig(read) {
         previousVersion: str(read, 'previous-version'),
         newVersion: str(read, 'new-version'),
         dependencyGroup: str(read, 'dependency-group'),
-        alertGhsaId: str(read, 'alert-ghsa-id'),
-        alertCvss: str(read, 'alert-cvss'),
         weightCvss: num(read, 'weight-cvss', exports.DEFAULTS.weightCvss),
         weightEpss: num(read, 'weight-epss', exports.DEFAULTS.weightEpss),
         scopeProd: num(read, 'scope-prod', exports.DEFAULTS.scopeProd),
