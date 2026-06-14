@@ -105,8 +105,6 @@ export function parseConfig(read: InputReader): Config {
     previousVersion: str(read, 'previous-version'),
     newVersion: str(read, 'new-version'),
     dependencyGroup: str(read, 'dependency-group'),
-    alertGhsaId: str(read, 'alert-ghsa-id'),
-    alertCvss: str(read, 'alert-cvss'),
 
     weightCvss: num(read, 'weight-cvss', DEFAULTS.weightCvss),
     weightEpss: num(read, 'weight-epss', DEFAULTS.weightEpss),

@@ -49,8 +49,6 @@ jobs:
           previous-version: ${{ steps.meta.outputs.previous-version }}
           new-version: ${{ steps.meta.outputs.new-version }}
           dependency-group: ${{ steps.meta.outputs.dependency-group }}
-          alert-ghsa-id: ${{ steps.meta.outputs.ghsa-id }}
-          alert-cvss: ${{ steps.meta.outputs.cvss }}
 
       # 検証用に outputs をログへ。式インジェクション回避のため env 経由で渡す。
       - name: Show triage outputs

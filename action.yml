@@ -36,14 +36,6 @@ inputs:
     description: 'fetch-metadata の dependency-group（グループ PR 名。非グループは空）'
     required: false
     default: ''
-  alert-ghsa-id:
-    description: 'fetch-metadata（alert-lookup: true）の ghsa-id（先頭依存のみ）'
-    required: false
-    default: ''
-  alert-cvss:
-    description: 'fetch-metadata（alert-lookup: true）の cvss（先頭依存のみ）'
-    required: false
-    default: ''
 
   # --- スコア重み・スコープ係数 ---
   weight-cvss:
