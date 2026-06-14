@@ -20,6 +20,7 @@ function vuln(p: Partial<Vulnerability> = {}): Vulnerability {
     packageName: 'pkg',
     ecosystem: 'npm',
     scope: 'direct:production',
+    matchConfidence: 'name',
     ...p,
   };
 }

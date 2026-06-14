@@ -42,10 +42,15 @@ function footnote(config: Config): string {
   ].join(' ');
 }
 
+/** 突合確度セル。version=中（バージョン検証済）、name=緩（名前一致のみ）。 */
+function confidenceCell(vuln: Vulnerability): string {
+  return vuln.matchConfidence === 'version' ? '中' : '緩';
+}
+
 /** 脆弱性テーブル（ヘッダ＋各脆弱性 1 行）。 */
 function table(vulns: Vulnerability[], config: Config): string {
-  const head = '| パッケージ | GHSA | CVE | CVSS | EPSS | スコープ | スコア |';
-  const sep = '|---|---|---|---|---|---|---|';
+  const head = '| パッケージ | GHSA | CVE | CVSS | EPSS | スコープ | 確度 | スコア |';
+  const sep = '|---|---|---|---|---|---|---|---|';
   const rows = vulns.map((v) => {
     const cells = [
       v.packageName,
@@ -54,11 +59,30 @@ function table(vulns: Vulnerability[], config: Config): string {
       v.cvss.toFixed(1),
       epssCell(v),
       v.scope,
+      confidenceCell(v),
       scoreVulnerability(v, config).toFixed(3),
     ];
     return `| ${cells.join(' | ')} |`;
   });
   return [head, sep, ...rows].join('\n');
+}
+
+/**
+ * 確度バナー。version（中）を含む場合は解決見込みを示す。
+ * 全て name（緩）なら従来の未検証バナーを維持する。
+ */
+function confidenceBanner(vulns: Vulnerability[]): string {
+  const hasVersion = vulns.some((v) => v.matchConfidence === 'version');
+  if (hasVersion) {
+    return (
+      '> ✅ 「中」= このPRの new-version が修正版以上で **解決見込み**（バージョン検証済）。' +
+      '「緩」= **このPRが更新するパッケージに紐づく open alert**で、解決は **未検証**（パッケージ名一致のみ・バージョン未確認）。'
+    );
+  }
+  return (
+    '> ⚠️ 下表は **このPRが更新するパッケージに紐づく open alert**。' +
+    'このPRが解決するかは **未検証**（パッケージ名一致のみ・バージョン未確認）。'
+  );
 }
 
 /**
@@ -84,8 +108,7 @@ export function renderComment(input: RenderInput): string {
     '',
     `**判定: \`${result.bucket}\`**（PR スコア ${result.score.toFixed(3)}）`,
     '',
-    '> ⚠️ 下表は **このPRが更新するパッケージに紐づく open alert**。' +
-      'このPRが解決するかは **未検証**（パッケージ名一致のみ・バージョン未確認）。',
+    confidenceBanner(vulns),
     groupNote(config),
     table(vulns, config),
     '',

@@ -12,6 +12,13 @@ export type Bucket = 'high' | 'mid' | 'low' | 'none';
 /** PR 全体スコアの集約方式。 */
 export type AggregateMethod = 'max' | 'sum';
 
+/**
+ * 突合確度。
+ * - 'name': パッケージ名一致のみ（緩）。このPRが解決するかは未検証。
+ * - 'version': new-version が修正版（firstPatchedVersion）以上で解決見込み（中）。
+ */
+export type MatchConfidence = 'name' | 'version';
+
 /** 1 件の脆弱性（alert / advisory から組み立てる）。 */
 export interface Vulnerability {
   /** GHSA ID（例: GHSA-xxxx-xxxx-xxxx）。 */
@@ -35,6 +42,11 @@ export interface Vulnerability {
   ecosystem: string;
   /** この脆弱性のスコープ（スコープ係数の決定に使う）。 */
   scope: DependencyType;
+  /**
+   * 突合確度（#37）。name=名前一致のみ（緩）、version=バージョン検証済（中）。
+   * コメント表示の確度マーク・バナー文言の出し分けに使う。score には影響しない。
+   */
+  matchConfidence: MatchConfidence;
 }
 
 /** PR 全体のスコア評価結果。 */
