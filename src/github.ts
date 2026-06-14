@@ -41,12 +41,14 @@ export function createGithubClient(octokit: GithubOctokit, repo: RepoRef): Githu
 
   return {
     async listIssueComments(issueNumber) {
-      const res = await octokit.rest.issues.listComments({
+      // ページング全件取得。マーカー検索（PR-G の upsert）が 2 ページ目以降を
+      // 取りこぼすとコメント重複につながるため paginate を使う。
+      const comments = await octokit.paginate(octokit.rest.issues.listComments, {
         ...base,
         issue_number: issueNumber,
         per_page: 100,
       });
-      return res.data.map((c) => ({ id: c.id, body: c.body ?? '' }));
+      return comments.map((c) => ({ id: c.id, body: c.body ?? '' }));
     },
 
     async createIssueComment(issueNumber, body) {
@@ -58,12 +60,12 @@ export function createGithubClient(octokit: GithubOctokit, repo: RepoRef): Githu
     },
 
     async listLabelsOnIssue(issueNumber) {
-      const res = await octokit.rest.issues.listLabelsOnIssue({
+      const labels = await octokit.paginate(octokit.rest.issues.listLabelsOnIssue, {
         ...base,
         issue_number: issueNumber,
         per_page: 100,
       });
-      return res.data.map((l) => l.name);
+      return labels.map((l) => l.name);
     },
 
     async addLabels(issueNumber, names) {

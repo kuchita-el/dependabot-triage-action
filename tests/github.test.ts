@@ -19,9 +19,24 @@ function mockIssues(overrides: Record<string, ReturnType<typeof vi.fn>> = {}) {
   };
 }
 
-function clientWith(issues: ReturnType<typeof mockIssues>) {
-  const octokit = { rest: { issues } } as unknown as GithubOctokit;
+/** 既定の paginate: 実 octokit と同様、route を呼んでデータ配列を返すよう委譲する。 */
+function defaultPaginate() {
+  return vi.fn(async (route: (p: unknown) => Promise<{ data: unknown[] }>, params: unknown) => {
+    const res = await route(params);
+    return res.data;
+  });
+}
+
+function makeClient(
+  issues: ReturnType<typeof mockIssues>,
+  paginate: ReturnType<typeof vi.fn> = defaultPaginate(),
+) {
+  const octokit = { rest: { issues }, paginate } as unknown as GithubOctokit;
   return createGithubClient(octokit, repo);
+}
+
+function clientWith(issues: ReturnType<typeof mockIssues>) {
+  return makeClient(issues);
 }
 
 describe('createGithubClient', () => {
@@ -42,6 +57,16 @@ describe('createGithubClient', () => {
       { id: 10, body: 'a' },
       { id: 11, body: '' },
     ]);
+  });
+
+  it('レビュー: listIssueComments は paginate で全ページ取得する（101件超でも欠落しない）', async () => {
+    const many = Array.from({ length: 150 }, (_, i) => ({ id: i, body: `c${i}` }));
+    const paginate = vi.fn().mockResolvedValue(many);
+    const client = makeClient(mockIssues(), paginate);
+    const result = await client.listIssueComments(1);
+    expect(paginate).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(150);
+    expect(result[149]).toEqual({ id: 149, body: 'c149' });
   });
 
   it('AC2: createIssueComment が createComment を呼ぶ', async () => {
