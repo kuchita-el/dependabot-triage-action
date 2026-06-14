@@ -96,6 +96,17 @@ describe('enrichWithEpss', () => {
     expect(v!.cveIds).toEqual(['CVE-UNSCORED']); // CVE 自体は保持
   });
 
+  it('レビュー: fetchEpss が非有限値(NaN)を返しても throw せず epssAvailable=false に倒す', async () => {
+    const deps: EpssDeps = {
+      getCveIds: vi.fn().mockResolvedValue(['CVE-BAD']),
+      fetchEpss: vi.fn().mockResolvedValue({ 'CVE-BAD': NaN }), // 異常応答
+    };
+    const [v] = await enrichWithEpss([vuln('GHSA-1')], deps);
+    expect(v!.epss).toBe(0);
+    expect(v!.epssAvailable).toBe(false);
+    expect(Number.isFinite(v!.epss)).toBe(true); // 非有限を伝播させない
+  });
+
   it('AC6: 同一 GHSA が複数 vuln にまたがると getCveIds は1回だけ（メモ化）', async () => {
     const getCveIds = vi.fn().mockResolvedValue(['CVE-A']);
     const deps: EpssDeps = { getCveIds, fetchEpss: vi.fn().mockResolvedValue({ 'CVE-A': 0.5 }) };

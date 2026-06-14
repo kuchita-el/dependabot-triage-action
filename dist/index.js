@@ -30151,6 +30151,59 @@ function parseConfig(read) {
 
 /***/ }),
 
+/***/ 6908:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.enrichWithEpss = enrichWithEpss;
+/**
+ * 脆弱性集合に EPSS を付与する。各 vuln の GHSA→CVE→EPSS を解決し、
+ * epss は複数 CVE の max（最悪ケース駆動）。取得失敗時は当該 vuln のみ
+ * epss=0 / epssAvailable=false にフォールバックし、他 vuln の処理は止めない。
+ *
+ * GHSA→CVE はメモ化（同一 GHSA の重複取得を避ける）。fetchEpss は per-vuln の
+ * 失敗分離を優先して跨 vuln メモ化しない（vuln は GHSA で一意のため実益も小さい）。
+ * 入力 vulns は破壊せず新オブジェクトを返す。
+ */
+async function enrichWithEpss(vulns, deps) {
+    // GHSA→CVE の Promise メモ化（並列でも 1 GHSA 1 回）。
+    const cveCache = new Map();
+    const resolveCves = (ghsaId) => {
+        let p = cveCache.get(ghsaId);
+        if (p === undefined) {
+            p = deps.getCveIds(ghsaId);
+            cveCache.set(ghsaId, p);
+        }
+        return p;
+    };
+    return Promise.all(vulns.map(async (v) => {
+        try {
+            const cveIds = await resolveCves(v.ghsaId);
+            if (cveIds.length === 0) {
+                return { ...v, cveIds: [], epss: 0, epssAvailable: false };
+            }
+            const epssMap = await deps.fetchEpss(cveIds);
+            // EPSS(FIRST) は全 CVE を網羅しない。未収載 CVE は応答に現れないため、
+            // 「実際に有限スコアが取れた CVE」だけで判定する。非有限値（異常応答の NaN 等）も
+            // 未収載扱いに倒し、evaluate へ非有限を伝播させない（無出力縮退の防止）。
+            // 1 件も無ければ epssAvailable=false とし、取得済み 0 と未取得（—）を区別する。
+            const scored = cveIds.filter((cve) => Number.isFinite(epssMap[cve]));
+            const epss = scored.length > 0 ? Math.max(...scored.map((cve) => epssMap[cve])) : 0;
+            return { ...v, cveIds, epss, epssAvailable: scored.length > 0 };
+        }
+        catch {
+            // 取得失敗は見逃し方向に倒さず、スコアは CVSS のみで継続させる
+            // （epss=0）。失敗は当該 vuln に閉じ込め、全体は止めない。
+            return { ...v, cveIds: [], epss: 0, epssAvailable: false };
+        }
+    }));
+}
+
+
+/***/ }),
+
 /***/ 9248:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -30343,8 +30396,36 @@ const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const github_1 = __nccwpck_require__(9248);
 const run_1 = __nccwpck_require__(9786);
+/** GHSA→CVE を Global Advisory から解決（identifiers の CVE、無ければ cve_id）。 */
+async function getCveIds(octokit, ghsaId) {
+    const { data } = await octokit.rest.securityAdvisories.getGlobalAdvisory({ ghsa_id: ghsaId });
+    const fromIdentifiers = (data.identifiers ?? [])
+        .filter((i) => i.type === 'CVE')
+        .map((i) => i.value);
+    if (fromIdentifiers.length > 0)
+        return fromIdentifiers;
+    return data.cve_id ? [data.cve_id] : [];
+}
+/** CVE 群の EPSS を FIRST API から取得。空は {}、失敗は throw（per-vuln フォールバックに委ねる）。 */
+async function fetchEpss(cveIds) {
+    if (cveIds.length === 0)
+        return {};
+    const url = `https://api.first.org/data/v1/epss?cve=${cveIds.join(',')}`;
+    const res = await fetch(url);
+    if (!res.ok)
+        throw new Error(`EPSS API error: ${res.status}`);
+    const json = (await res.json());
+    const map = {};
+    for (const row of json.data ?? []) {
+        const n = Number(row.epss);
+        // 非有限値は map に入れない（未収載扱いに倒し、enrichWithEpss 側で epss=0 に落とす）。
+        if (Number.isFinite(n))
+            map[row.cve] = n;
+    }
+    return map;
+}
 /**
- * エントリポイント（合成ルート）。実 @actions/core / @actions/github を
+ * エントリポイント（合成ルート）。実 @actions/core / @actions/github / HTTP を
  * run() の依存に配線するだけの薄い層。ロジックは run.ts にあり、本ファイルは
  * ユニットテスト対象外（vitest coverage から除外）。
  */
@@ -30354,6 +30435,12 @@ async function main() {
         core.warning('pull_request イベントではないため no-op で終了');
         return;
     }
+    // octokit は 1 インスタンス生成し、client と EPSS の両方で共用する。
+    const octokit = github.getOctokit(core.getInput('github-token'));
+    const epssDeps = {
+        getCveIds: (ghsaId) => getCveIds(octokit, ghsaId),
+        fetchEpss,
+    };
     await (0, run_1.run)({
         getInput: (name) => core.getInput(name),
         setOutput: (name, value) => core.setOutput(name, value),
@@ -30365,7 +30452,8 @@ async function main() {
             prNumber: pr.number,
             actor: pr.user?.login ?? github.context.actor,
         },
-        makeClient: (token, repo) => (0, github_1.createGithubClient)(github.getOctokit(token), repo),
+        makeClient: (_token, repo) => (0, github_1.createGithubClient)(octokit, repo),
+        epssDeps,
     });
 }
 // run() の内部 try/catch の外で投げられた例外（非 ConfigError 再送出・
@@ -30381,73 +30469,7 @@ main().catch((err) => core.setFailed(err instanceof Error ? err.message : String
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.collectM1Vulnerabilities = collectM1Vulnerabilities;
 exports.reconcileVulnerabilities = reconcileVulnerabilities;
-/** CVSS 数値を GitHub 互換の severity バンドへ変換。 */
-function severityFromCvss(cvss) {
-    if (cvss >= 9.0)
-        return 'critical';
-    if (cvss >= 7.0)
-        return 'high';
-    if (cvss >= 4.0)
-        return 'moderate';
-    if (cvss >= 0.1)
-        return 'low';
-    return 'none';
-}
-/** dependency-type 文字列を DependencyType へ。未知・空は最悪ケース prod。 */
-function toScope(dependencyType) {
-    switch (dependencyType) {
-        case 'direct:development':
-            return 'direct:development';
-        case 'indirect':
-            return 'indirect';
-        case 'direct:production':
-            return 'direct:production';
-        default:
-            return 'direct:production';
-    }
-}
-/**
- * CVSS 文字列を数値へ。空・不正は 0。
- * score.ts の入力契約（cvss∈[0,10]）をこの層で強制し、誤設定の範囲外値を
- * [0,10] にクランプする（負値→0 / >10→10）。表示と severity の不整合・
- * 見逃し方向の沈黙を防ぐ。
- */
-function parseCvss(raw) {
-    if (raw.trim() === '')
-        return 0;
-    const value = Number(raw);
-    if (!Number.isFinite(value))
-        return 0;
-    return Math.min(10, Math.max(0, value));
-}
-/**
- * M1 のメタデータ構築。fetch-metadata の出力（Config のパススルー）のみから
- * 単一の Vulnerability を組み立てる。alert 情報（ghsaId）が無ければ
- * 非セキュリティ更新として空配列を返す。
- *
- * グループ PR の alerts 突合・EPSS 実取得は後続（M2 / epss.ts）。
- */
-function collectM1Vulnerabilities(config) {
-    if (config.alertGhsaId === '') {
-        return [];
-    }
-    const cvss = parseCvss(config.alertCvss);
-    return [
-        {
-            ghsaId: config.alertGhsaId,
-            cveIds: [],
-            cvss,
-            epss: 0,
-            epssAvailable: false,
-            severity: severityFromCvss(cvss),
-            packageName: config.dependencyNames[0] ?? '',
-            ecosystem: config.packageEcosystem,
-            scope: toScope(config.dependencyType),
-        },
-    ];
-}
 /** パッケージ名の正規化（小文字＋trim）。突合の照合キーに使う。 */
 function normalizeName(name) {
     return name.trim().toLowerCase();
@@ -30509,15 +30531,16 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.run = run;
 const config_1 = __nccwpck_require__(2973);
 const metadata_1 = __nccwpck_require__(3630);
+const epss_1 = __nccwpck_require__(6908);
 const score_1 = __nccwpck_require__(9);
 const labels_1 = __nccwpck_require__(4584);
 const comment_1 = __nccwpck_require__(2246);
 /** Dependabot の bot アクター名。これ以外の PR は対象外。 */
 const DEPENDABOT_ACTOR = 'dependabot[bot]';
 /**
- * オーケストレーション本体。ガード→config→metadata→score→ラベル/コメント→outputs。
- * 設定不備（ConfigError）は常に setFailed。トリアージ失敗は fail-on-error で
- * setFailed / warning を切り替え、既定では PR をブロックしない。
+ * オーケストレーション本体。ガード→config→（alerts 突合→EPSS）→score→ラベル/コメント→outputs。
+ * 設定不備（ConfigError）は常に setFailed。トリアージ失敗（alerts/EPSS/API）は
+ * fail-on-error で setFailed / warning を切り替え、既定では PR をブロックしない。
  */
 async function run(deps) {
     const { context } = deps;
@@ -30540,14 +30563,17 @@ async function run(deps) {
     }
     // (3)〜(8) トリアージ本体。失敗は fail-on-error で切替。
     try {
-        const vulns = (0, metadata_1.collectM1Vulnerabilities)(config);
+        const client = deps.makeClient(config.githubToken, context.repo);
+        // open alerts を取得し、PR の変更依存と名前一致で突合（緩）→ EPSS 付与。
+        const alerts = await client.listOpenDependabotAlerts();
+        const reconciled = (0, metadata_1.reconcileVulnerabilities)(config, alerts);
+        const vulns = await (0, epss_1.enrichWithEpss)(reconciled, deps.epssDeps);
         const result = (0, score_1.evaluate)(vulns, config);
         // outputs はラベル/コメント（副作用）より先に出す。スコアは決定論的に
         // 算出済みのため、publish（API）が失敗しても結果を下流ジョブへ渡せる。
         deps.setOutput('score', String(result.score));
         deps.setOutput('bucket', result.bucket);
         deps.setOutput('vulnerabilities', JSON.stringify(vulns));
-        const client = deps.makeClient(config.githubToken, context.repo);
         if (config.label) {
             await (0, labels_1.applyBucketLabel)(client, context.prNumber, result.bucket, config);
         }

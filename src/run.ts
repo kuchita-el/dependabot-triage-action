@@ -1,8 +1,10 @@
 import { ConfigError, parseConfig } from './config';
-import { collectM1Vulnerabilities } from './metadata';
+import { reconcileVulnerabilities } from './metadata';
+import { enrichWithEpss } from './epss';
 import { evaluate } from './score';
 import { applyBucketLabel } from './labels';
 import { renderComment, upsertComment } from './comment';
+import type { EpssDeps } from './epss';
 import type { GithubClient } from './github';
 
 /** Dependabot の bot アクター名。これ以外の PR は対象外。 */
@@ -14,7 +16,7 @@ export interface RunContext {
   actor: string;
 }
 
-/** run() の依存。実 @actions/* は main.ts が注入する（DI でテスト可能にする）。 */
+/** run() の依存。実 @actions/* / HTTP は main.ts が注入する（DI でテスト可能にする）。 */
 export interface RunDeps {
   getInput: (name: string) => string;
   setOutput: (name: string, value: string) => void;
@@ -23,12 +25,13 @@ export interface RunDeps {
   info: (message: string) => void;
   context: RunContext;
   makeClient: (token: string, repo: { owner: string; repo: string }) => GithubClient;
+  epssDeps: EpssDeps;
 }
 
 /**
- * オーケストレーション本体。ガード→config→metadata→score→ラベル/コメント→outputs。
- * 設定不備（ConfigError）は常に setFailed。トリアージ失敗は fail-on-error で
- * setFailed / warning を切り替え、既定では PR をブロックしない。
+ * オーケストレーション本体。ガード→config→（alerts 突合→EPSS）→score→ラベル/コメント→outputs。
+ * 設定不備（ConfigError）は常に setFailed。トリアージ失敗（alerts/EPSS/API）は
+ * fail-on-error で setFailed / warning を切り替え、既定では PR をブロックしない。
  */
 export async function run(deps: RunDeps): Promise<void> {
   const { context } = deps;
@@ -53,7 +56,12 @@ export async function run(deps: RunDeps): Promise<void> {
 
   // (3)〜(8) トリアージ本体。失敗は fail-on-error で切替。
   try {
-    const vulns = collectM1Vulnerabilities(config);
+    const client = deps.makeClient(config.githubToken, context.repo);
+
+    // open alerts を取得し、PR の変更依存と名前一致で突合（緩）→ EPSS 付与。
+    const alerts = await client.listOpenDependabotAlerts();
+    const reconciled = reconcileVulnerabilities(config, alerts);
+    const vulns = await enrichWithEpss(reconciled, deps.epssDeps);
     const result = evaluate(vulns, config);
 
     // outputs はラベル/コメント（副作用）より先に出す。スコアは決定論的に
@@ -62,7 +70,6 @@ export async function run(deps: RunDeps): Promise<void> {
     deps.setOutput('bucket', result.bucket);
     deps.setOutput('vulnerabilities', JSON.stringify(vulns));
 
-    const client = deps.makeClient(config.githubToken, context.repo);
     if (config.label) {
       await applyBucketLabel(client, context.prNumber, result.bucket, config);
     }
