@@ -24,7 +24,11 @@ async function fetchEpss(cveIds: string[]): Promise<Record<string, number>> {
   if (!res.ok) throw new Error(`EPSS API error: ${res.status}`);
   const json = (await res.json()) as { data?: Array<{ cve: string; epss: string }> };
   const map: Record<string, number> = {};
-  for (const row of json.data ?? []) map[row.cve] = Number(row.epss);
+  for (const row of json.data ?? []) {
+    const n = Number(row.epss);
+    // 非有限値は map に入れない（未収載扱いに倒し、enrichWithEpss 側で epss=0 に落とす）。
+    if (Number.isFinite(n)) map[row.cve] = n;
+  }
   return map;
 }
 

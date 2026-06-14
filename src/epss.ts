@@ -43,9 +43,10 @@ export async function enrichWithEpss(
         }
         const epssMap = await deps.fetchEpss(cveIds);
         // EPSS(FIRST) は全 CVE を網羅しない。未収載 CVE は応答に現れないため、
-        // 「実際にスコアが取れた CVE」だけで判定する。1 件も無ければ epssAvailable=false
-        // とし、コメントで取得済み 0 と未取得（—）を区別できるようにする。
-        const scored = cveIds.filter((cve) => epssMap[cve] !== undefined);
+        // 「実際に有限スコアが取れた CVE」だけで判定する。非有限値（異常応答の NaN 等）も
+        // 未収載扱いに倒し、evaluate へ非有限を伝播させない（無出力縮退の防止）。
+        // 1 件も無ければ epssAvailable=false とし、取得済み 0 と未取得（—）を区別する。
+        const scored = cveIds.filter((cve) => Number.isFinite(epssMap[cve]));
         const epss = scored.length > 0 ? Math.max(...scored.map((cve) => epssMap[cve]!)) : 0;
         return { ...v, cveIds, epss, epssAvailable: scored.length > 0 };
       } catch {
