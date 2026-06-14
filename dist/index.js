@@ -29990,7 +29990,7 @@ function renderComment(input) {
             exports.MARKER,
             HEADER,
             '',
-            '🟢 通常更新（このPRが解決する既知の脆弱性は検出されませんでした）。',
+            '🟢 通常更新（更新パッケージに紐づく open alert は検出されませんでした）。',
             '',
         ].join('\n');
     }
