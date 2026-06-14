@@ -29990,7 +29990,7 @@ function renderComment(input) {
             exports.MARKER,
             HEADER,
             '',
-            '🟢 通常更新（このPRが解決する既知の脆弱性は検出されませんでした）。',
+            '🟢 通常更新（更新パッケージに紐づく open alert は検出されませんでした）。',
             '',
         ].join('\n');
     }
@@ -29999,6 +29999,9 @@ function renderComment(input) {
         HEADER,
         '',
         `**判定: \`${result.bucket}\`**（PR スコア ${result.score.toFixed(3)}）`,
+        '',
+        '> ⚠️ 下表は **このPRが更新するパッケージに紐づく open alert**。' +
+            'このPRが解決するかは **未検証**（パッケージ名一致のみ・バージョン未確認）。',
         groupNote(config),
         table(vulns, config),
         '',

@@ -109,6 +109,17 @@ describe('renderComment', () => {
     const out = render([vuln({ cveIds: [] })]);
     expect(dataRows(out)[0]!).toContain('—');
   });
+
+  it('M2-3: セキュリティ更新の出力に「未検証」の確度明示が含まれる', () => {
+    const out = render([vuln()]);
+    expect(out).toMatch(/未検証/);
+    expect(out).toMatch(/open alert/);
+  });
+
+  it('M2-3: 解決を断定する文言（解決する脆弱性）を含まない', () => {
+    const out = render([vuln()]);
+    expect(out).not.toMatch(/解決する脆弱性/);
+  });
 });
 
 /** GithubClient モック。listIssueComments の返り値を与える。 */
