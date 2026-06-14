@@ -32,6 +32,14 @@ export interface Vulnerability {
   scope: DependencyType;
 }
 
+/** PR 全体のスコア評価結果。 */
+export interface ScoreResult {
+  /** PR 全体スコア（[0,1] にクランプ済み）。 */
+  score: number;
+  /** スコア（と突合有無）から決まるバケット。 */
+  bucket: Bucket;
+}
+
 /** action.yml の inputs をパース・検証した結果。 */
 export interface Config {
   // --- 認証 ---
