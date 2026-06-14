@@ -13,7 +13,10 @@ function normalizeName(name: string): string {
  * グループPR（new-version 空）・firstPatchedVersion null・semver パース不能は
  * すべて 'name' にフォールバックし、throw しない。npm semver を前提とする。
  */
-function classifyConfidence(newVersion: string, firstPatchedVersion: string | null): MatchConfidence {
+function classifyConfidence(
+  newVersion: string,
+  firstPatchedVersion: string | null,
+): MatchConfidence {
   if (newVersion === '' || firstPatchedVersion === null) return 'name';
   if (semverValid(newVersion) === null || semverValid(firstPatchedVersion) === null) return 'name';
   return semverGte(newVersion, firstPatchedVersion) ? 'version' : 'name';
