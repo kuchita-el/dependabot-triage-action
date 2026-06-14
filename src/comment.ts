@@ -1,4 +1,5 @@
 import type { Config, ScoreResult, Vulnerability } from './types';
+import type { GithubClient } from './github';
 import { scoreVulnerability } from './score';
 
 /** 既存コメントを識別するためのマーカー（本文先頭に置く）。 */
@@ -88,4 +89,25 @@ export function renderComment(input: RenderInput): string {
     footnote(config),
     '',
   ].join('\n');
+}
+
+/**
+ * トリアージコメントを upsert する。マーカー付き既存コメントがあれば update、
+ * 無ければ create。synchronize 再実行でもコメントを増殖させず単一に保つ（F6）。
+ */
+export async function upsertComment(
+  client: GithubClient,
+  issueNumber: number,
+  body: string,
+): Promise<void> {
+  const comments = await client.listIssueComments(issueNumber);
+  // 本文先頭にマーカーがある自前コメントのみを厳密に同定する。
+  // includes だと引用返信（行頭 "> <!-- ... -->"）まで拾い、他者コメントを
+  // 上書きしてしまう恐れがあるため startsWith を使う。
+  const existing = comments.find((c) => c.body.startsWith(MARKER));
+  if (existing) {
+    await client.updateIssueComment(existing.id, body);
+  } else {
+    await client.createIssueComment(issueNumber, body);
+  }
 }

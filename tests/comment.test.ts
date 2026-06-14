@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { renderComment, MARKER } from '../src/comment';
+import { describe, expect, it, vi } from 'vitest';
+import { renderComment, upsertComment, MARKER } from '../src/comment';
 import { evaluate } from '../src/score';
 import { parseConfig } from '../src/config';
+import type { GithubClient, IssueComment } from '../src/github';
 import type { Config, Vulnerability } from '../src/types';
 
 function cfg(overrides: Record<string, string> = {}): Config {
@@ -107,5 +108,62 @@ describe('renderComment', () => {
   it('CVE 欠損は「—」を表示', () => {
     const out = render([vuln({ cveIds: [] })]);
     expect(dataRows(out)[0]!).toContain('—');
+  });
+});
+
+/** GithubClient モック。listIssueComments の返り値を与える。 */
+function mockClient(comments: IssueComment[]): GithubClient {
+  return {
+    listIssueComments: vi.fn().mockResolvedValue(comments),
+    createIssueComment: vi.fn().mockResolvedValue(undefined),
+    updateIssueComment: vi.fn().mockResolvedValue(undefined),
+    listLabelsOnIssue: vi.fn().mockResolvedValue([]),
+    addLabels: vi.fn().mockResolvedValue(undefined),
+    removeLabel: vi.fn().mockResolvedValue(undefined),
+    ensureLabelExists: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+describe('upsertComment', () => {
+  const body = `${MARKER}\n本文`;
+
+  it('AC1: マーカー付き既存コメントが無ければ create する', async () => {
+    const client = mockClient([]);
+    await upsertComment(client, 7, body);
+    expect(client.createIssueComment).toHaveBeenCalledWith(7, body);
+    expect(client.updateIssueComment).not.toHaveBeenCalled();
+  });
+
+  it('AC2: マーカー付き既存コメントがあれば update し create しない', async () => {
+    const client = mockClient([{ id: 555, body: `${MARKER}\n古い本文` }]);
+    await upsertComment(client, 7, body);
+    expect(client.updateIssueComment).toHaveBeenCalledWith(555, body);
+    expect(client.createIssueComment).not.toHaveBeenCalled();
+  });
+
+  it('AC3: マーカーを含まない他コメントのみなら create する（誤 update しない）', async () => {
+    const client = mockClient([
+      { id: 1, body: 'LGTM' },
+      { id: 2, body: 'こちらは別bot' },
+    ]);
+    await upsertComment(client, 7, body);
+    expect(client.createIssueComment).toHaveBeenCalledWith(7, body);
+    expect(client.updateIssueComment).not.toHaveBeenCalled();
+  });
+
+  it('AC4: 回帰: 既存マーカーコメントありで再実行してもコメントが増えない（create 0回）', async () => {
+    const client = mockClient([{ id: 99, body: `${MARKER}\n前回` }]);
+    await upsertComment(client, 7, body);
+    await upsertComment(client, 7, body);
+    expect(client.createIssueComment).not.toHaveBeenCalled();
+    expect(client.updateIssueComment).toHaveBeenCalledTimes(2);
+  });
+
+  it('レビュー: 引用返信(行頭が > のマーカー)は自前コメントと誤認しない', async () => {
+    // GitHub の Quote reply は本文先頭が "> <!-- ... -->" になる。これを update しない。
+    const client = mockClient([{ id: 42, body: `> ${MARKER}\n> 引用された本文\n\n人間の返信` }]);
+    await upsertComment(client, 7, body);
+    expect(client.updateIssueComment).not.toHaveBeenCalled();
+    expect(client.createIssueComment).toHaveBeenCalledWith(7, body);
   });
 });
