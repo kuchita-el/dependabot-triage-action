@@ -121,6 +121,7 @@ function mockClient(comments: IssueComment[]): GithubClient {
     addLabels: vi.fn().mockResolvedValue(undefined),
     removeLabel: vi.fn().mockResolvedValue(undefined),
     ensureLabelExists: vi.fn().mockResolvedValue(undefined),
+    listOpenDependabotAlerts: vi.fn().mockResolvedValue([]),
   };
 }
 

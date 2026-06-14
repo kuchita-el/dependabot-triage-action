@@ -155,3 +155,102 @@ describe('createGithubClient', () => {
     expect(issues.createLabel).not.toHaveBeenCalled();
   });
 });
+
+/** Dependabot alert の生レスポンス（最小）。 */
+function rawAlert(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    security_advisory: {
+      ghsa_id: 'GHSA-xxxx-yyyy-zzzz',
+      cve_id: 'CVE-2026-0001',
+      severity: 'high',
+      cvss: { score: 7.5 },
+      cvss_severities: { cvss_v4: { score: 8.1 } },
+    },
+    security_vulnerability: {
+      package: { ecosystem: 'npm', name: 'left-pad' },
+      first_patched_version: { identifier: '1.3.0' },
+      vulnerable_version_range: '< 1.3.0',
+    },
+    dependency: { scope: 'runtime' },
+    ...overrides,
+  };
+}
+
+function alertsClient(alerts: Array<Record<string, unknown>>) {
+  const listAlertsForRepo = vi.fn().mockResolvedValue({ data: alerts });
+  const paginate = vi.fn(
+    async (route: (p: unknown) => Promise<{ data: unknown[] }>, params: unknown) =>
+      (await route(params)).data,
+  );
+  const octokit = {
+    rest: { dependabot: { listAlertsForRepo }, issues: {} },
+    paginate,
+  } as unknown as GithubOctokit;
+  return { client: createGithubClient(octokit, repo), listAlertsForRepo, paginate };
+}
+
+describe('listOpenDependabotAlerts', () => {
+  it('AC1: paginate で listAlertsForRepo を state=open 付きで呼ぶ', async () => {
+    const { client, paginate, listAlertsForRepo } = alertsClient([]);
+    await client.listOpenDependabotAlerts();
+    expect(paginate).toHaveBeenCalledWith(
+      listAlertsForRepo,
+      expect.objectContaining({ owner: 'o', repo: 'r', state: 'open' }),
+    );
+  });
+
+  it('AC2: alert を DependabotAlert に正規化する', async () => {
+    const { client } = alertsClient([rawAlert()]);
+    const [a] = await client.listOpenDependabotAlerts();
+    expect(a).toEqual({
+      ghsaId: 'GHSA-xxxx-yyyy-zzzz',
+      cveId: 'CVE-2026-0001',
+      severity: 'high',
+      cvss: 8.1, // v4 優先
+      ecosystem: 'npm',
+      packageName: 'left-pad',
+      scope: 'runtime',
+      firstPatchedVersion: '1.3.0',
+      vulnerableVersionRange: '< 1.3.0',
+    });
+  });
+
+  it('AC3: cvss は v4 優先 / v4 無しは v3 / どちらも無しは 0', async () => {
+    const v4 = alertsClient([rawAlert()]);
+    expect((await v4.client.listOpenDependabotAlerts())[0]!.cvss).toBe(8.1);
+
+    const v3 = alertsClient([
+      rawAlert({
+        security_advisory: { ghsa_id: 'G', cve_id: null, severity: 'low', cvss: { score: 4.2 } },
+      }),
+    ]);
+    expect((await v3.client.listOpenDependabotAlerts())[0]!.cvss).toBe(4.2);
+
+    const none = alertsClient([
+      rawAlert({ security_advisory: { ghsa_id: 'G', cve_id: null, severity: 'low' } }),
+    ]);
+    expect((await none.client.listOpenDependabotAlerts())[0]!.cvss).toBe(0);
+  });
+
+  it('AC4: ページングの全件を返す', async () => {
+    const { client } = alertsClient([rawAlert(), rawAlert(), rawAlert()]);
+    expect(await client.listOpenDependabotAlerts()).toHaveLength(3);
+  });
+
+  it('AC5: cve_id / first_patched_version 欠落は null', async () => {
+    const { client } = alertsClient([
+      rawAlert({
+        security_advisory: { ghsa_id: 'G', cve_id: null, severity: 'low', cvss: { score: 1 } },
+        security_vulnerability: {
+          package: { ecosystem: 'pip', name: 'requests' },
+          vulnerable_version_range: '>= 0',
+        },
+        dependency: {},
+      }),
+    ]);
+    const [a] = await client.listOpenDependabotAlerts();
+    expect(a!.cveId).toBeNull();
+    expect(a!.firstPatchedVersion).toBeNull();
+    expect(a!.scope).toBeNull();
+  });
+});
