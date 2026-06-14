@@ -108,4 +108,53 @@ describe('reconcileVulnerabilities', () => {
       'direct:production',
     );
   });
+
+  // --- #37: 突合確度（matchConfidence） ---
+
+  it('#37-1: new-version >= firstPatchedVersion なら version（中）', () => {
+    const c = cfg({ 'dependency-names': 'left-pad', 'new-version': '1.3.0' });
+    expect(
+      reconcileVulnerabilities(c, [alert({ firstPatchedVersion: '1.3.0' })])[0]!.matchConfidence,
+    ).toBe('version');
+    const c2 = cfg({ 'dependency-names': 'left-pad', 'new-version': '1.4.0' });
+    expect(
+      reconcileVulnerabilities(c2, [alert({ firstPatchedVersion: '1.3.0' })])[0]!.matchConfidence,
+    ).toBe('version');
+  });
+
+  it('#37-2: new-version < firstPatchedVersion なら name（緩）', () => {
+    const c = cfg({ 'dependency-names': 'left-pad', 'new-version': '1.2.0' });
+    expect(
+      reconcileVulnerabilities(c, [alert({ firstPatchedVersion: '1.3.0' })])[0]!.matchConfidence,
+    ).toBe('name');
+  });
+
+  it('#37-3: new-version 空（グループPR）は name（緩）', () => {
+    const c = cfg({ 'dependency-names': 'left-pad' }); // new-version 未指定
+    expect(
+      reconcileVulnerabilities(c, [alert({ firstPatchedVersion: '1.3.0' })])[0]!.matchConfidence,
+    ).toBe('name');
+  });
+
+  it('#37-4: firstPatchedVersion が null なら name（緩・据え置き）', () => {
+    const c = cfg({ 'dependency-names': 'left-pad', 'new-version': '1.3.0' });
+    expect(
+      reconcileVulnerabilities(c, [alert({ firstPatchedVersion: null })])[0]!.matchConfidence,
+    ).toBe('name');
+  });
+
+  it('#37-5: semver パース不能なら name（緩・throw しない）', () => {
+    const c = cfg({ 'dependency-names': 'left-pad', 'new-version': 'not-semver' });
+    expect(() =>
+      reconcileVulnerabilities(c, [alert({ firstPatchedVersion: '1.3.0' })]),
+    ).not.toThrow();
+    expect(
+      reconcileVulnerabilities(c, [alert({ firstPatchedVersion: '1.3.0' })])[0]!.matchConfidence,
+    ).toBe('name');
+    const c2 = cfg({ 'dependency-names': 'left-pad', 'new-version': '1.3.0' });
+    expect(
+      reconcileVulnerabilities(c2, [alert({ firstPatchedVersion: 'patched-soon' })])[0]!
+        .matchConfidence,
+    ).toBe('name');
+  });
 });

@@ -20,6 +20,7 @@ function vuln(p: Partial<Vulnerability> = {}): Vulnerability {
     packageName: 'pkg',
     ecosystem: 'npm',
     scope: 'direct:production',
+    matchConfidence: 'name',
     ...p,
   };
 }
@@ -119,6 +120,30 @@ describe('renderComment', () => {
   it('M2-3: 解決を断定する文言（解決する脆弱性）を含まない', () => {
     const out = render([vuln()]);
     expect(out).not.toMatch(/解決する脆弱性/);
+  });
+
+  // --- #37: 突合確度の表示 ---
+
+  it('#37: 確度列が各行に出る（version=中 / name=緩）', () => {
+    const out = render([
+      vuln({ ghsaId: 'GHSA-v', packageName: 'a', matchConfidence: 'version' }),
+      vuln({ ghsaId: 'GHSA-n', packageName: 'b', matchConfidence: 'name' }),
+    ]);
+    const rows = dataRows(out);
+    expect(rows.find((r) => r.includes('GHSA-v'))).toMatch(/中/);
+    expect(rows.find((r) => r.includes('GHSA-n'))).toMatch(/緩/);
+  });
+
+  it('#37: version を含むと解決見込み（バージョン検証済）の文言が出る', () => {
+    const out = render([vuln({ matchConfidence: 'version' })]);
+    expect(out).toMatch(/解決見込み/);
+    expect(out).toMatch(/バージョン検証済/);
+  });
+
+  it('#37: 全て name のときは従来の未検証バナー（解決見込み文言を出さない）', () => {
+    const out = render([vuln({ matchConfidence: 'name' })]);
+    expect(out).toMatch(/未検証/);
+    expect(out).not.toMatch(/解決見込み/);
   });
 });
 
