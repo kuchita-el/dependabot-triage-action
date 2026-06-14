@@ -1,0 +1,64 @@
+name: Dependabot Triage (dogfooding)
+
+# このリポジトリ自身の Dependabot PR をトリアージする（M1 実地検証 / M4 dogfooding）。
+# pull_request_target で動かし、PR のコードは checkout/実行しない（インジェクション対策）。
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+# 同一 PR の run を直列化し、古い run はキャンセルする。
+# synchronize（Dependabot の rebase/force-push）連打で run が並走すると、
+# upsertComment の重複防止が TOCTOU で破れ（両 run がマーカー無しと判定→二重 create）、
+# ラベル付替えも競合する。それを防ぐ。
+concurrency:
+  group: triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# 書込みは全て PAT(octokit) と fetch-metadata が担う。既定 GITHUB_TOKEN は
+# checkout(contents: read) のみ使うため、最小権限に絞る。
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    # Dependabot 以外の PR は対象外（Action 側でもガードするが、ジョブごと skip して無駄を省く）。
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    steps:
+      # ベース（main）を checkout する。pull_request_target の既定は base ref のため
+      # PR のコードは取得しない。uses: ./ は main の action.yml / dist を参照する。
+      - name: Checkout (base only)
+        uses: actions/checkout@v4
+
+      # alert-lookup は GITHUB_TOKEN では読めないため PAT を使う。
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          alert-lookup: true
+          github-token: ${{ secrets.DEPENDABOT_TRIAGE_PAT }}
+
+      - name: Triage
+        id: triage
+        uses: ./
+        with:
+          github-token: ${{ secrets.DEPENDABOT_TRIAGE_PAT }}
+          dependency-names: ${{ steps.meta.outputs.dependency-names }}
+          dependency-type: ${{ steps.meta.outputs.dependency-type }}
+          package-ecosystem: ${{ steps.meta.outputs.package-ecosystem }}
+          previous-version: ${{ steps.meta.outputs.previous-version }}
+          new-version: ${{ steps.meta.outputs.new-version }}
+          dependency-group: ${{ steps.meta.outputs.dependency-group }}
+          alert-ghsa-id: ${{ steps.meta.outputs.ghsa-id }}
+          alert-cvss: ${{ steps.meta.outputs.cvss }}
+
+      # 検証用に outputs をログへ。式インジェクション回避のため env 経由で渡す。
+      - name: Show triage outputs
+        env:
+          SCORE: ${{ steps.triage.outputs.score }}
+          BUCKET: ${{ steps.triage.outputs.bucket }}
+          VULNS: ${{ steps.triage.outputs.vulnerabilities }}
+        run: |
+          echo "score=$SCORE"
+          echo "bucket=$BUCKET"
+          echo "vulnerabilities=$VULNS"
