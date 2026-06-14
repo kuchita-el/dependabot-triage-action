@@ -41,16 +41,18 @@ export async function applyBucketLabel(
   const target = targetLabel(bucket, config);
   const current = await client.listLabelsOnIssue(issueNumber);
 
-  // 管理ラベルのうち target 以外を外す（管理外ラベルは対象にしない）。
+  // 先に target を付与する（未付与なら存在保証してから add）。
+  // 付与を除去より前に行うことで、途中失敗時に「無ラベル」ではなく
+  // 「新旧両方付いた over-labeled」で終わり、可視・回復容易にする（anti-silent-failure）。
+  if (target && !current.includes(target.name)) {
+    await client.ensureLabelExists(target.name, target.color, LABEL_DESCRIPTION);
+    await client.addLabels(issueNumber, [target.name]);
+  }
+
+  // 後から管理ラベルのうち target 以外を外す（管理外ラベルは対象にしない）。
   for (const name of managed) {
     if (name !== target?.name && current.includes(name)) {
       await client.removeLabel(issueNumber, name);
     }
-  }
-
-  // target が未付与なら、存在を保証してから付与する。
-  if (target && !current.includes(target.name)) {
-    await client.ensureLabelExists(target.name, target.color, LABEL_DESCRIPTION);
-    await client.addLabels(issueNumber, [target.name]);
   }
 }

@@ -78,4 +78,13 @@ describe('applyBucketLabel', () => {
     expect(client.ensureLabelExists).toHaveBeenCalledWith(LOW, '0e8a16', expect.any(String));
     expect(client.addLabels).toHaveBeenCalledWith(7, [LOW]);
   });
+
+  it('レビュー: 付与(add)を除去(remove)より先に行う（途中失敗で無ラベルにしない）', async () => {
+    const client = mockClient([MID]); // high へ付替え: HIGH を add し MID を remove
+    await applyBucketLabel(client, 7, 'high', cfg());
+    const addOrder = (client.addLabels as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+    const removeOrder = (client.removeLabel as ReturnType<typeof vi.fn>).mock
+      .invocationCallOrder[0]!;
+    expect(addOrder).toBeLessThan(removeOrder);
+  });
 });
