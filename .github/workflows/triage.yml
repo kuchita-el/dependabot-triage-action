@@ -6,8 +6,17 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
+# 同一 PR の run を直列化し、古い run はキャンセルする。
+# synchronize（Dependabot の rebase/force-push）連打で run が並走すると、
+# upsertComment の重複防止が TOCTOU で破れ（両 run がマーカー無しと判定→二重 create）、
+# ラベル付替えも競合する。それを防ぐ。
+concurrency:
+  group: triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# 書込みは全て PAT(octokit) と fetch-metadata が担う。既定 GITHUB_TOKEN は
+# checkout(contents: read) のみ使うため、最小権限に絞る。
 permissions:
-  pull-requests: write
   contents: read
 
 jobs:
