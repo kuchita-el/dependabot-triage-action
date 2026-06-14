@@ -145,13 +145,25 @@ describe('parseConfig', () => {
   // --- #36: 数値範囲・整合性バリデーション ---
 
   it('#36-1: 重み・スコープ係数に負値を与えると ConfigError', () => {
-    for (const name of ['weight-cvss', 'weight-epss', 'scope-prod', 'scope-dev', 'scope-indirect']) {
+    for (const name of [
+      'weight-cvss',
+      'weight-epss',
+      'scope-prod',
+      'scope-dev',
+      'scope-indirect',
+    ]) {
       expect(() => parseConfig(reader(minimal({ [name]: '-0.1' })))).toThrow(ConfigError);
     }
   });
 
   it('#36-1: 重み・スコープ係数の 0 は受理する（境界）', () => {
-    for (const name of ['weight-cvss', 'weight-epss', 'scope-prod', 'scope-dev', 'scope-indirect']) {
+    for (const name of [
+      'weight-cvss',
+      'weight-epss',
+      'scope-prod',
+      'scope-dev',
+      'scope-indirect',
+    ]) {
       expect(() => parseConfig(reader(minimal({ [name]: '0' })))).not.toThrow();
     }
   });
@@ -185,7 +197,9 @@ describe('parseConfig', () => {
 
   it('#36-4: 範囲違反の ConfigError は input 名と受領値を含む', () => {
     expect(() => parseConfig(reader(minimal({ 'weight-cvss': '-2' })))).toThrow(/weight-cvss.*-2/);
-    expect(() => parseConfig(reader(minimal({ 'threshold-high': '5' })))).toThrow(/threshold-high.*5/);
+    expect(() => parseConfig(reader(minimal({ 'threshold-high': '5' })))).toThrow(
+      /threshold-high.*5/,
+    );
     expect(() =>
       parseConfig(reader(minimal({ 'threshold-high': '0.2', 'threshold-mid': '0.4' }))),
     ).toThrow(/threshold-high.*threshold-mid/);

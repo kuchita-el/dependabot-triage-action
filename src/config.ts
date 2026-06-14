@@ -52,10 +52,14 @@ function num(
     throw new ConfigError(`input "${name}" は有限数値である必要があります（受領値: "${raw}"）`);
   }
   if (range?.min !== undefined && value < range.min) {
-    throw new ConfigError(`input "${name}" は ${range.min} 以上である必要があります（受領値: "${raw}"）`);
+    throw new ConfigError(
+      `input "${name}" は ${range.min} 以上である必要があります（受領値: "${raw}"）`,
+    );
   }
   if (range?.max !== undefined && value > range.max) {
-    throw new ConfigError(`input "${name}" は ${range.max} 以下である必要があります（受領値: "${raw}"）`);
+    throw new ConfigError(
+      `input "${name}" は ${range.max} 以下である必要があります（受領値: "${raw}"）`,
+    );
   }
   return value;
 }
