@@ -33047,11 +33047,13 @@ async function enrichWithEpss(vulns, deps) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.createGithubClient = createGithubClient;
-/** 生 alert を DependabotAlert へ正規化。cvss は v4 優先で防御的に取る。 */
+/** 生 alert を DependabotAlert へ正規化。cvss は v3/v4 の max（最悪ケース）で防御的に取る。 */
 function normalizeAlert(raw) {
     const adv = raw.security_advisory ?? {};
     const vuln = raw.security_vulnerability ?? {};
-    const cvss = adv.cvss_severities?.cvss_v4?.score ?? adv.cvss?.score ?? 0;
+    // GitHub API は v4 ベクタ未保有でも cvss_v4.score を 0 で返すため ?? では v3 に落ちない。
+    // null/undefined を 0 に正規化したうえで max を取り、高い方（最悪ケース）を採る。
+    const cvss = Math.max(adv.cvss_severities?.cvss_v4?.score ?? 0, adv.cvss?.score ?? 0);
     return {
         ghsaId: adv.ghsa_id ?? '',
         cveId: adv.cve_id ?? null,

@@ -206,7 +206,7 @@ describe('listOpenDependabotAlerts', () => {
       ghsaId: 'GHSA-xxxx-yyyy-zzzz',
       cveId: 'CVE-2026-0001',
       severity: 'high',
-      cvss: 8.1, // v4 優先
+      cvss: 8.1, // max(v3=7.5, v4=8.1)
       ecosystem: 'npm',
       packageName: 'left-pad',
       scope: 'runtime',
@@ -215,10 +215,40 @@ describe('listOpenDependabotAlerts', () => {
     });
   });
 
-  it('AC3: cvss は v4 優先 / v4 無しは v3 / どちらも無しは 0', async () => {
+  it('AC3: cvss は v3/v4 の max / 片方のみはその値 / どちらも無しは 0', async () => {
+    // v4 > v3 → v4
     const v4 = alertsClient([rawAlert()]);
     expect((await v4.client.listOpenDependabotAlerts())[0]!.cvss).toBe(8.1);
 
+    // v3 > v4 → v3（max が高い方を採る）
+    const v3hi = alertsClient([
+      rawAlert({
+        security_advisory: {
+          ghsa_id: 'G',
+          cve_id: null,
+          severity: 'high',
+          cvss: { score: 8.1 },
+          cvss_severities: { cvss_v4: { score: 2.0 } },
+        },
+      }),
+    ]);
+    expect((await v3hi.client.listOpenDependabotAlerts())[0]!.cvss).toBe(8.1);
+
+    // v4 ベクタ未保有（score=0）+ v3 実値 → v3（??では 0 に化けた回帰ケース）
+    const v4zero = alertsClient([
+      rawAlert({
+        security_advisory: {
+          ghsa_id: 'G',
+          cve_id: null,
+          severity: 'high',
+          cvss: { score: 8.1 },
+          cvss_severities: { cvss_v4: { score: 0 } },
+        },
+      }),
+    ]);
+    expect((await v4zero.client.listOpenDependabotAlerts())[0]!.cvss).toBe(8.1);
+
+    // v3 のみ（cvss_severities 無し） → v3
     const v3 = alertsClient([
       rawAlert({
         security_advisory: { ghsa_id: 'G', cve_id: null, severity: 'low', cvss: { score: 4.2 } },
@@ -226,6 +256,7 @@ describe('listOpenDependabotAlerts', () => {
     ]);
     expect((await v3.client.listOpenDependabotAlerts())[0]!.cvss).toBe(4.2);
 
+    // どちらも無し → 0
     const none = alertsClient([
       rawAlert({ security_advisory: { ghsa_id: 'G', cve_id: null, severity: 'low' } }),
     ]);
