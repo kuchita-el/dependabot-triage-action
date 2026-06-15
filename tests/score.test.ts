@@ -96,6 +96,25 @@ describe('scoreVulnerability', () => {
     expect(scoreVulnerability(v, cfg())).toBeCloseTo(0.74, 10);
   });
 
+  it('レビュー#44: EPSS 取得済み行は重み合計≠1.0 でも従来式（除算なし）を維持', () => {
+    // w_cvss=0.6, w_epss=0.6（合計1.2・非正規化）, epssAvailable=true。
+    // 旧式 0.6·0.5 + 0.6·0.2 = 0.42。常時除算する実装だと 0.42/1.2=0.35 で後退する。
+    const v = vuln({ cvss: 5.0, epss: 0.2, epssAvailable: true, scope: 'direct:production' });
+    expect(scoreVulnerability(v, cfg({ 'weight-cvss': '0.6', 'weight-epss': '0.6' }))).toBeCloseTo(
+      0.42,
+      10,
+    );
+  });
+
+  it('レビュー#44: EPSS 不明行は重み合計≠1.0 でも CVSS 単独レンジ（w_cvss で再正規化）', () => {
+    // w_cvss=0.6, w_epss=0.6, epssAvailable=false → (0.6·0.8)/0.6 = 0.8
+    const v = vuln({ cvss: 8.0, epss: 0, epssAvailable: false, scope: 'direct:production' });
+    expect(scoreVulnerability(v, cfg({ 'weight-cvss': '0.6', 'weight-epss': '0.6' }))).toBeCloseTo(
+      0.8,
+      10,
+    );
+  });
+
   it('レビュー: w_cvss=0 かつ EPSS 不明は 0 除算回避で base=0', () => {
     // presentWeight = 0 + 0 = 0 → base=0 → score=0（NaN/Infinity を出さない）
     const c: Config = { ...cfg(), weightCvss: 0 };
