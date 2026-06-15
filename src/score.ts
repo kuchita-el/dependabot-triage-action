@@ -34,9 +34,18 @@ export function scopeFactor(scope: DependencyType, config: Config): number {
 /**
  * 脆弱性 1 件のスコア: (w_cvss · cvss/10 + w_epss · epss) · scope(depType)。
  * クランプは行わない（最終集約後に evaluate でクランプする）。
+ *
+ * EPSS 不明（epssAvailable=false）の場合は EPSS 項を落とし、存在する重みで
+ * 再正規化する（base を presentWeight で割る）。これにより「不明」を「リスク 0」と
+ * みなす下方バイアスを避け、CVSS 単独でも本来のレンジを使えるようにする。
+ * presentWeight=0（w_cvss=0 かつ EPSS 不明）は 0 除算を避け base=0 とする。
  */
 export function scoreVulnerability(vuln: Vulnerability, config: Config): number {
-  const base = config.weightCvss * (vuln.cvss / 10) + config.weightEpss * vuln.epss;
+  const useEpss = vuln.epssAvailable;
+  const presentWeight = config.weightCvss + (useEpss ? config.weightEpss : 0);
+  const weighted =
+    config.weightCvss * (vuln.cvss / 10) + (useEpss ? config.weightEpss * vuln.epss : 0);
+  const base = presentWeight > 0 ? weighted / presentWeight : 0;
   return base * scopeFactor(vuln.scope, config);
 }
 

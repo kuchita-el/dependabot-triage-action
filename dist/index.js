@@ -32761,6 +32761,7 @@ function footnote(config) {
         '<sub>',
         'スコア = (w_cvss·cvss/10 + w_epss·epss)·scope。',
         `重み: w_cvss=${config.weightCvss}, w_epss=${config.weightEpss}。`,
+        'EPSS 未取得（—）の行は EPSS 項を除外し残り重みで再正規化（CVSS 単独レンジ）。',
         `スコープ係数: prod=${config.scopeProd} / dev=${config.scopeDev} / indirect=${config.scopeIndirect}。`,
         `集約: ${config.aggregate}（PR スコアは [0,1] にクランプ。各行スコアは未クランプの素値）。`,
         `閾値: high≥${config.thresholdHigh}, mid≥${config.thresholdMid}。`,
@@ -33486,9 +33487,17 @@ function scopeFactor(scope, config) {
 /**
  * 脆弱性 1 件のスコア: (w_cvss · cvss/10 + w_epss · epss) · scope(depType)。
  * クランプは行わない（最終集約後に evaluate でクランプする）。
+ *
+ * EPSS 不明（epssAvailable=false）の場合は EPSS 項を落とし、存在する重みで
+ * 再正規化する（base を presentWeight で割る）。これにより「不明」を「リスク 0」と
+ * みなす下方バイアスを避け、CVSS 単独でも本来のレンジを使えるようにする。
+ * presentWeight=0（w_cvss=0 かつ EPSS 不明）は 0 除算を避け base=0 とする。
  */
 function scoreVulnerability(vuln, config) {
-    const base = config.weightCvss * (vuln.cvss / 10) + config.weightEpss * vuln.epss;
+    const useEpss = vuln.epssAvailable;
+    const presentWeight = config.weightCvss + (useEpss ? config.weightEpss : 0);
+    const weighted = config.weightCvss * (vuln.cvss / 10) + (useEpss ? config.weightEpss * vuln.epss : 0);
+    const base = presentWeight > 0 ? weighted / presentWeight : 0;
     return base * scopeFactor(vuln.scope, config);
 }
 /**

@@ -30,8 +30,9 @@ export interface Vulnerability {
   /** EPSS（0..1）。取得失敗時・未取得時は 0（score 用のフォールバック値）。 */
   epss: number;
   /**
-   * EPSS が実際に取得できたか。false は未取得（M1 は EPSS を取得しないため常に false）。
-   * score は epss(数値) を使うが、コメント表示は本フラグで「—（未取得）」と数値を出し分ける。
+   * EPSS が実際に取得できたか。false は未取得（CVE 未割当・FIRST 未収載・取得失敗）。
+   * コメント表示は本フラグで「—（未取得）」と数値を出し分ける。score も本フラグを見て、
+   * false なら EPSS 項を落として重みを再正規化する（不明を 0 とみなさない）。
    */
   epssAvailable: boolean;
   /** GitHub severity（low | moderate | high | critical）。 */

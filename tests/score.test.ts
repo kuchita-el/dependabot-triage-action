@@ -67,6 +67,41 @@ describe('scoreVulnerability', () => {
       10,
     );
   });
+
+  it('EPSS 不明時は EPSS 項を落として重みを再正規化する（不明を 0 とみなさない）', () => {
+    // epssAvailable=false → base = (cvss/10)（w_cvss を実効 1.0 に再正規化）
+    // (8.1/10)*0.4 = 0.324。旧式 (0.6*0.81)*0.4 = 0.1944 とは異なる。
+    const v = vuln({ cvss: 8.1, epss: 0, epssAvailable: false, scope: 'direct:development' });
+    expect(scoreVulnerability(v, cfg())).toBeCloseTo(0.324, 10);
+  });
+
+  it('EPSS 不明時は epss の数値を無視する（フォールバック残値に依存しない）', () => {
+    // epssAvailable=false なら epss=0.9 でも EPSS 項は寄与しない → (8.0/10)*1.0 = 0.8
+    const v = vuln({ cvss: 8.0, epss: 0.9, epssAvailable: false, scope: 'direct:production' });
+    expect(scoreVulnerability(v, cfg())).toBeCloseTo(0.8, 10);
+  });
+
+  it('EPSS 不明時の再正規化はカスタム重みでも CVSS 単独レンジになる', () => {
+    // w_cvss=0.5, w_epss=0.5, epssAvailable=false → base = (0.5*cvss/10)/0.5 = cvss/10
+    const v = vuln({ cvss: 8.0, epss: 0, epssAvailable: false, scope: 'direct:production' });
+    expect(scoreVulnerability(v, cfg({ 'weight-cvss': '0.5', 'weight-epss': '0.5' }))).toBeCloseTo(
+      0.8,
+      10,
+    );
+  });
+
+  it('EPSS 取得済みなら再正規化しない（従来式を維持）', () => {
+    // epssAvailable=true → (0.6*9.0/10 + 0.4*0.5)*1.0 = 0.74
+    const v = vuln({ cvss: 9.0, epss: 0.5, epssAvailable: true });
+    expect(scoreVulnerability(v, cfg())).toBeCloseTo(0.74, 10);
+  });
+
+  it('レビュー: w_cvss=0 かつ EPSS 不明は 0 除算回避で base=0', () => {
+    // presentWeight = 0 + 0 = 0 → base=0 → score=0（NaN/Infinity を出さない）
+    const c: Config = { ...cfg(), weightCvss: 0 };
+    const v = vuln({ cvss: 9.0, epss: 0, epssAvailable: false });
+    expect(scoreVulnerability(v, c)).toBe(0);
+  });
 });
 
 describe('aggregateScores', () => {
