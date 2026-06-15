@@ -25,7 +25,7 @@ export interface Vulnerability {
   ghsaId: string;
   /** GHSA に紐づく CVE ID 群（0 件以上）。 */
   cveIds: string[];
-  /** CVSS スコア（0..10）。v4 優先・無ければ v3。 */
+  /** CVSS スコア（0..10）。v3/v4 の max。 */
   cvss: number;
   /** EPSS（0..1）。取得失敗時・未取得時は 0（score 用のフォールバック値）。 */
   epss: number;
