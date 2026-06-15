@@ -44,7 +44,7 @@ CI（`.github/workflows/ci.yml`）は typecheck → lint → format:check → te
 - `config.ts` — `parseConfig`。action.yml inputs を検証付きで `Config` へ。`DEFAULTS` は既定値の単一ソースで **action.yml の default とミラー必須**。不正値は `ConfigError`（`run()` で常に `setFailed`）。
 - `metadata.ts` — `reconcileVulnerabilities`。open alerts と PR 更新依存を**パッケージ名一致のみ**で突合（ecosystem は突合キーにしない）。`classifyConfidence` で new-version が修正版以上なら確度を `version`（中）へ格上げ。
 - `epss.ts` — `enrichWithEpss`。GHSA→CVE をメモ化、EPSS は複数 CVE の max。取得失敗は当該 vuln のみ `epss=0` にフォールバックし全体は止めない。
-- `score.ts` — `score = (w_cvss·cvss/10 + w_epss·epss)·scope` を集約（max/sum）し [0,1] クランプ → バケット。非有限値は silent に落とさず throw。
+- `score.ts` — `score = (w_cvss·cvss/10 + w_epss·epss)·scope` を集約（max/sum）し [0,1] クランプ → バケット。非有限値は silent に落とさず throw。EPSS 不明（`epssAvailable=false`）時は EPSS 項を落とし存在重みで再正規化（不明を 0 とみなさない）。
 - `github.ts` — `createGithubClient`。octokit を隠蔽するアダプタ。ドメイン層は octokit を直接触らず本クライアント経由。
 - `labels.ts` — `applyBucketLabel`。管理ラベル 3 値のうち 1 つだけ付与、他は外す（他人のラベルには触らない）。付与を除去より先に行い、途中失敗時に無ラベルでなく over-labeled で終わらせる。
 - `comment.ts` — `renderComment`（純粋）+ `upsertComment`。`MARKER` 行頭一致でコメントを単一に保つ（再実行で増殖させない）。
