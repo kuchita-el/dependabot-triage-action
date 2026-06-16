@@ -47,7 +47,7 @@ run()
  ├─ metadata.collect()
  │    ├─ M1: fetch-metadata 出力(inputs経由)をそのまま脆弱性1件に
  │    └─ M2: + GET /dependabot/alerts?state=open (ページング) を突合
- ├─ epss.enrich(vulns)                       # GHSA→CVE→EPSS, 失敗時 epss=0
+ ├─ epss.enrich(vulns)                       # GHSA→EPSS(GitHub優先)/CVE→FIRST補完, 失敗時 epss=0
  ├─ score.evaluate(vulns, config)            # 各score→集約(max)→bucket
  ├─ if config.label:   labels.apply(bucket)  # 管理ラベル群を付替え
  ├─ if config.comment: comment.upsert(body)  # マーカーで update/create
@@ -66,6 +66,16 @@ PR 全体スコア = 各脆弱性スコアの集約（既定 max、sum は M3）
 CVSS は **v3/v4 の max**（最悪ケース駆動。GitHub API は v4 ベクタ未保有でも score=0 を返すため、欠損を 0 とみなし高い方を採る）。
 
 EPSS が取得できない場合（CVE 未割当・FIRST 未収載・取得失敗）は、EPSS 項を落とし **存在する重みで再正規化**する（`score(v) = (cvss/10)·scope`、w_cvss を実効 1.0 へ）。「不明」を「リスク 0」とみなす下方バイアスを避け、CVSS 単独でも本来のレンジを使う。`w_cvss=0` かつ EPSS 不明の縮退は 0 除算回避でスコア 0。
+
+### EPSS 取得ソース選定（#45）
+
+EPSS の取得経路として 3 案を比較し、**A 案（GitHub 優先 + FIRST 補完）を採用**した。
+
+- **A: GitHub epss 優先 + FIRST 補完（採用）** — `getGlobalAdvisory` の応答に同梱される `epss.percentage`（advisory 単位 1 値）を一次ソースとし、GHSA→CVE 解決と同一リクエストで取得する。GitHub 値が無い（CVE 未割当・未収載等）場合のみ FIRST EPSS API へフォールバックする。CVE 解決のために元々叩いている advisory 取得で EPSS も同時に得られるため、外部依存・失敗モード・呼び出し回数を減らせる。フォールバックを残すため堅牢性も維持できる。
+- **B: GitHub のみ（FIRST 廃止）却下** — FIRST を廃止すると、GitHub `epss` が null かつ FIRST には存在する CVE で取りこぼしが生じうる。補完経路を捨てるため却下。
+- **C: 現状維持（FIRST のみ）却下** — advisory に EPSS が同梱されているのに使わず、別途 HTTP を叩き続ける。余分な外部依存・呼び出しを残すため却下。
+
+**集約セマンティクス**: GitHub `epss` は advisory（GHSA）単位で 1 値、FIRST は CVE 単位。A 案では **「GitHub 値があれば優先（advisory 単位 1 値、GitHub が畳み済み）、無ければ FIRST の複数 CVE max（既存）」** とする。CVSS も `getGlobalAdvisory` の GHSA 単位で取得しており、EPSS を GitHub 値優先にすることで両指標の取得粒度が GHSA 単位で揃う。複数 CVE を持つ GHSA の EPSS 累積評価（noisy-OR 等）は別の設計判断として本対応では扱わない（別 Issue）。
 
 ## 突合（F2 / M2 の肝） — 強度「緩」
 
