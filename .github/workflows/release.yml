@@ -1,32 +1,54 @@
-name: Release (bake dist into tag)
+name: Release (immutable vX.Y.Z)
 
-# vX.Y.Z タグ作成時に dist を焼き込み、外部 consumer が uses: ...@vX.Y.Z で
-# 参照できる配布参照を生成する。dist/ は VCS 管理外（#47）のため、タグの commit を
-# checkout → ncc build → dist を commit → 同じタグを dist 入り commit へ force-update する。
-# 人手で dist を焼く手順は不要。floating v1 の再ポイントは従来通り人手で行う（本 workflow 後に
-# 焼込み済み commit を指すよう移動する。リリースモデル見直しは #48）。
+# 不変リリースを発行する（#48）。version を指定して手動起動し、以下を一気通貫で行う:
+#   1. 起動 ref（既定 main）から dist を決定的にビルド
+#   2. dist を焼き込んだ commit を生成（dist/ は VCS 管理外のため -f で強制ステージング）
+#   3. その commit に release 固有タグ vX.Y.Z を「新規」作成して push（force-update しない）
+#   4. そのタグに GitHub Release を発行 → Immutable Releases 有効時はタグが commit に固定（不変化）
+#
+# 旧実装（タグ push をトリガに公開済みタグを git push -f で付け替え）は immutability と
+# 両立しないため廃止した。公開後タグの force-update は一切行わない。
+# floating v1 の再ポイントは従来どおり人手（本 workflow 後に焼込み済み commit を指すよう移動）。
+# Immutable Releases の有効化手順・検証手順は docs/release.md を参照。
 on:
-  push:
-    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'リリース版（vX.Y.Z 形式。例: v1.2.3）'
+        required: true
+        type: string
 
-# 同一タグの再 run／近接 push で build→force-push が並走するとタグ参照がレースする。
-# 単一 run 内の冪等チェック（git diff --cached）では並走 run 間の競合を防げないため直列化する。
+# 同一 version の多重起動で commit→tag→release が並走するとタグ参照がレースする。
 # リリースは中断したくないので cancel-in-progress は false。
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.version }}
   cancel-in-progress: false
 
-# タグを dist 入り commit へ付け替えて push するため contents: write が要る。
+# タグ push・commit 作成・GitHub Release 発行に contents: write が要る。
 permissions:
   contents: write
 
 jobs:
-  bake-dist:
+  release:
     runs-on: ubuntu-latest
     steps:
-      # トリガとなったタグの commit を checkout する。
-      - name: Checkout (tag)
+      # 起動 ref（既定 main）の commit を checkout する。dist はここから生成する。
+      - name: Checkout
         uses: actions/checkout@v4
+
+      # version 形式を検証し、既存タグへの再リリースを早期に弾く（immutable は再付与不可）。
+      - name: Validate version and ensure tag is new
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version は vX.Y.Z 形式で指定する（受領値: ${VERSION}）"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::タグ ${VERSION} は既に存在する。immutable リリースは再付与できない。版を上げて再実行する。"
+            exit 1
+          fi
 
       - name: Setup toolchain (mise → Node 24)
         uses: jdx/mise-action@v2
@@ -37,19 +59,30 @@ jobs:
           npm ci
           npm run build
 
-      - name: Bake dist and re-point tag
+      # dist を焼き込んだ commit を作り、その commit に新規タグを付けて push する。
+      # commit は main へは戻さずタグ経由でのみ到達可能（dist を main から排除する #47 方針を維持）。
+      - name: Bake dist and create tag
         env:
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # dist/ は .gitignore 対象のため -f で強制ステージング。
           git add -f dist
-          # 既に dist 焼込み済みのタグなら差分なし。冪等に終了する。
-          if git diff --cached --quiet; then
-            echo "dist は既に焼込み済み。再ポイント不要。"
-            exit 0
-          fi
-          git commit -m "build(release): bake dist for ${TAG}"
-          git tag -f "${TAG}"
-          git push -f origin "refs/tags/${TAG}"
+          git commit -m "build(release): bake dist for ${VERSION}"
+          # 新規タグのみ。force-update は行わない（immutability と両立させるため）。
+          git tag "${VERSION}"
+          git push origin "refs/tags/${VERSION}"
+
+      # タグに GitHub Release を発行する。Immutable Releases 有効時はこの発行でタグが
+      # commit に固定される。dist はタグの commit に含まれるため Release アセットは添付しない
+      # （draft→アセット添付→publish の推奨フローはアセットがある場合の手順）。
+      - name: Publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "${VERSION}" \
+            --verify-tag \
+            --generate-notes
