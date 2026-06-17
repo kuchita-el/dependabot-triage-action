@@ -16,7 +16,7 @@ floating `v1` は廃止せず **併存** する。GitHub Release に紐づかな
 | タグ | 種別 | 用途 |
 |---|---|---|
 | `vX.Y.Z` | immutable（Release 紐づき・固定） | consumer の不変参照用。推奨参照先 |
-| `v1` | movable（Release 紐づかない git タグ） | 利便用の version tag。最新の互換 commit を指すよう人手で移動 |
+| `v1` | movable（Release 紐づかない git タグ） | 利便用の version tag。リリースごとに workflow が最新 commit へ自動移動 |
 
 ## Immutable Releases の有効化
 
@@ -38,7 +38,11 @@ floating `v1` は廃止せず **併存** する。GitHub Release に紐づかな
    3. dist を焼き込んだ commit を作る（`dist/` は VCS 管理外のため `-f` で強制ステージング。commit は main へ戻さずタグ経由でのみ到達可能）。
    4. その commit に `vX.Y.Z` タグを **新規** 作成して push する（force-update しない）。
    5. `gh release create` で GitHub Release を発行する → 有効化済みならタグが commit に固定（不変化）。
-3. （任意・人手）floating `v1` を焼込み済み commit へ移動する。
+   6. floating major タグ（例 `v1`）を本リリース commit へ自動移動する（Release 非紐づけの可動タグのため force-update 可）。`move_major_tag` 入力（既定 true）で制御。
+
+> floating major の自動移動は「今リリースした commit」を指す前進リリース運用が前提。古いマイナー/パッチ系列への後追いリリースでは major を巻き戻すため、起動時に `move_major_tag=false` を指定してスキップする（release.yml の編集は不要）。
+>
+> floating major の force-update が機構として許容される前提（immutable releases は Release 紐づきタグのみを個別に保護し、`v*` パターン保護ではない）は、リポジトリの ruleset に `v*` タグルールが無いこと・AC1 の reject が `refs/tags/v1.2.0` 個別スコープだったことで裏取り済み。実地の最終確認は次回リリース（major 移動が green に通ること）で取る。
 
 > dist はタグの commit に含めるため、Release アセットは添付しない。「draft 作成 → アセット添付 → publish」の推奨フローはバイナリ等のアセットを伴う場合の手順であり、本 Action では不要。
 
@@ -65,9 +69,20 @@ git push -f origin refs/tags/vX.Y.Z
 
 Immutable Releases 有効時、この `git push -f` は GitHub により **拒否**される。拒否時のエラー出力（`! [remote rejected]` 等）を本ドキュメントに追記し、不変性が機構として効いていることの記録とする。
 
+初回 immutable リリース `v1.2.0`（Release 発行済み）に対し別 commit への付替え force-push を試行した実ログ（2026-06-18）:
+
 ```
-（ここに実際の reject ログを貼る）
+remote: error: GH013: Repository rule violations found for refs/tags/v1.2.0.
+remote: Review all repository rules at https://github.com/kuchita-el/dependabot-triage-action/rules?ref=refs%2Ftags%2Fv1.2.0
+remote:
+remote: - Cannot update this protected ref.
+remote:
+To github.com:kuchita-el/dependabot-triage-action.git
+ ! [remote rejected] v1.2.0 -> v1.2.0 (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:kuchita-el/dependabot-triage-action.git'
 ```
+
+remote の `v1.2.0` は元 commit を指したまま不変。Release 発行により当該タグが protected ref 化され、force-update が機構として拒否されることを確認した。
 
 ## 参考
 
