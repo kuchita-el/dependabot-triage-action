@@ -65,9 +65,20 @@ git push -f origin refs/tags/vX.Y.Z
 
 Immutable Releases 有効時、この `git push -f` は GitHub により **拒否**される。拒否時のエラー出力（`! [remote rejected]` 等）を本ドキュメントに追記し、不変性が機構として効いていることの記録とする。
 
+初回 immutable リリース `v1.2.0`（Release 発行済み）に対し別 commit への付替え force-push を試行した実ログ（2026-06-18）:
+
 ```
-（ここに実際の reject ログを貼る）
+remote: error: GH013: Repository rule violations found for refs/tags/v1.2.0.
+remote: Review all repository rules at https://github.com/kuchita-el/dependabot-triage-action/rules?ref=refs%2Ftags%2Fv1.2.0
+remote:
+remote: - Cannot update this protected ref.
+remote:
+To github.com:kuchita-el/dependabot-triage-action.git
+ ! [remote rejected] v1.2.0 -> v1.2.0 (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:kuchita-el/dependabot-triage-action.git'
 ```
+
+remote の `v1.2.0` は元 commit を指したまま不変。Release 発行により当該タグが protected ref 化され、force-update が機構として拒否されることを確認した。
 
 ## 参考
 
