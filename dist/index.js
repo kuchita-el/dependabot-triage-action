@@ -32996,28 +32996,36 @@ function parseConfig(read) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.enrichWithEpss = enrichWithEpss;
 /**
- * 脆弱性集合に EPSS を付与する。各 vuln の GHSA→CVE→EPSS を解決し、
- * epss は複数 CVE の max（最悪ケース駆動）。取得失敗時は当該 vuln のみ
- * epss=0 / epssAvailable=false にフォールバックし、他 vuln の処理は止めない。
+ * 脆弱性集合に EPSS を付与する（GitHub 優先 + FIRST 補完）。各 vuln の GHSA から
+ * advisory メタ（CVE 群＋GitHub EPSS）を解決し:
+ * - GitHub EPSS（advisory 単位 1 値）が有限ならそれを採用（FIRST は呼ばない）
+ * - 無ければ CVE 群を FIRST へ問い合わせ、複数 CVE の max（最悪ケース駆動）
+ * - CVE 無し・取得失敗時は当該 vuln のみ epss=0 / epssAvailable=false にフォールバックし、
+ *   他 vuln の処理は止めない。
  *
- * GHSA→CVE はメモ化（同一 GHSA の重複取得を避ける）。fetchEpss は per-vuln の
+ * GHSA→advisory はメモ化（同一 GHSA の重複取得を避ける）。fetchEpss は per-vuln の
  * 失敗分離を優先して跨 vuln メモ化しない（vuln は GHSA で一意のため実益も小さい）。
  * 入力 vulns は破壊せず新オブジェクトを返す。
  */
 async function enrichWithEpss(vulns, deps) {
-    // GHSA→CVE の Promise メモ化（並列でも 1 GHSA 1 回）。
-    const cveCache = new Map();
-    const resolveCves = (ghsaId) => {
-        let p = cveCache.get(ghsaId);
+    // GHSA→advisory の Promise メモ化（並列でも 1 GHSA 1 回）。
+    const advisoryCache = new Map();
+    const resolveAdvisory = (ghsaId) => {
+        let p = advisoryCache.get(ghsaId);
         if (p === undefined) {
-            p = deps.getCveIds(ghsaId);
-            cveCache.set(ghsaId, p);
+            p = deps.getAdvisory(ghsaId);
+            advisoryCache.set(ghsaId, p);
         }
         return p;
     };
     return Promise.all(vulns.map(async (v) => {
         try {
-            const cveIds = await resolveCves(v.ghsaId);
+            const { cveIds, githubEpss } = await resolveAdvisory(v.ghsaId);
+            // GitHub 同梱 EPSS を優先（advisory 単位で畳み済み。0 も有効値として採用）。
+            // 非有限値（異常応答の NaN 等）は採用せず FIRST フォールバックへ倒す。
+            if (githubEpss !== null && Number.isFinite(githubEpss)) {
+                return { ...v, cveIds, epss: githubEpss, epssAvailable: true };
+            }
             if (cveIds.length === 0) {
                 return { ...v, cveIds: [], epss: 0, epssAvailable: false };
             }
@@ -33235,15 +33243,23 @@ const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const github_1 = __nccwpck_require__(9248);
 const run_1 = __nccwpck_require__(9786);
-/** GHSA→CVE を Global Advisory から解決（identifiers の CVE、無ければ cve_id）。 */
-async function getCveIds(octokit, ghsaId) {
+/**
+ * GHSA → advisory メタ（CVE 群＋GitHub 同梱 EPSS）を Global Advisory から解決。
+ * CVE は identifiers の CVE、無ければ cve_id。EPSS は epss.percentage（advisory 単位 1 値、
+ * optional のため非有限・欠落は null へ）。1 リクエストで CVE と EPSS の両方を取得する。
+ */
+async function getAdvisory(octokit, ghsaId) {
     const { data } = await octokit.rest.securityAdvisories.getGlobalAdvisory({ ghsa_id: ghsaId });
     const fromIdentifiers = (data.identifiers ?? [])
         .filter((i) => i.type === 'CVE')
         .map((i) => i.value);
-    if (fromIdentifiers.length > 0)
-        return fromIdentifiers;
-    return data.cve_id ? [data.cve_id] : [];
+    const cveIds = fromIdentifiers.length > 0 ? fromIdentifiers : data.cve_id ? [data.cve_id] : [];
+    // epss は REST 応答に同梱されるが octokit の型（plugin-rest-endpoint-methods）が
+    // 未反映のため局所的に型を補う（openapi-types には security-advisory-epss として存在）。
+    const epss = data.epss;
+    const pct = epss?.percentage;
+    const githubEpss = typeof pct === 'number' && Number.isFinite(pct) ? pct : null;
+    return { cveIds, githubEpss };
 }
 /** CVE 群の EPSS を FIRST API から取得。空は {}、失敗は throw（per-vuln フォールバックに委ねる）。 */
 async function fetchEpss(cveIds) {
@@ -33277,7 +33293,7 @@ async function main() {
     // octokit は 1 インスタンス生成し、client と EPSS の両方で共用する。
     const octokit = github.getOctokit(core.getInput('github-token'));
     const epssDeps = {
-        getCveIds: (ghsaId) => getCveIds(octokit, ghsaId),
+        getAdvisory: (ghsaId) => getAdvisory(octokit, ghsaId),
         fetchEpss,
     };
     await (0, run_1.run)({

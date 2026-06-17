@@ -51,7 +51,7 @@ const SECURITY_INPUTS: Record<string, string> = {
 
 function fakeEpss(): EpssDeps {
   return {
-    getCveIds: vi.fn().mockResolvedValue(['CVE-2026-0001']),
+    getAdvisory: vi.fn().mockResolvedValue({ cveIds: ['CVE-2026-0001'], githubEpss: null }),
     fetchEpss: vi.fn().mockResolvedValue({ 'CVE-2026-0001': 0.5 }),
   };
 }
@@ -98,7 +98,7 @@ describe('run', () => {
     });
     await run(deps);
     expect(client.listOpenDependabotAlerts).toHaveBeenCalled();
-    expect(epssDeps.getCveIds).toHaveBeenCalledWith('GHSA-aaaa-bbbb-cccc'); // EPSS enrich
+    expect(epssDeps.getAdvisory).toHaveBeenCalledWith('GHSA-aaaa-bbbb-cccc'); // EPSS enrich
     expect(client.listLabelsOnIssue).toHaveBeenCalled(); // applyBucketLabel
     expect(client.listIssueComments).toHaveBeenCalled(); // upsertComment
     expect(deps.setOutput).toHaveBeenCalledWith('score', expect.any(String));

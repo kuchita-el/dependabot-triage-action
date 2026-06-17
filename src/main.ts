@@ -2,18 +2,27 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { createGithubClient } from './github';
 import { run } from './run';
-import type { EpssDeps } from './epss';
+import type { AdvisoryMeta, EpssDeps } from './epss';
 
 type Octokit = ReturnType<typeof github.getOctokit>;
 
-/** GHSA→CVE を Global Advisory から解決（identifiers の CVE、無ければ cve_id）。 */
-async function getCveIds(octokit: Octokit, ghsaId: string): Promise<string[]> {
+/**
+ * GHSA → advisory メタ（CVE 群＋GitHub 同梱 EPSS）を Global Advisory から解決。
+ * CVE は identifiers の CVE、無ければ cve_id。EPSS は epss.percentage（advisory 単位 1 値、
+ * optional のため非有限・欠落は null へ）。1 リクエストで CVE と EPSS の両方を取得する。
+ */
+async function getAdvisory(octokit: Octokit, ghsaId: string): Promise<AdvisoryMeta> {
   const { data } = await octokit.rest.securityAdvisories.getGlobalAdvisory({ ghsa_id: ghsaId });
   const fromIdentifiers = (data.identifiers ?? [])
     .filter((i) => i.type === 'CVE')
     .map((i) => i.value);
-  if (fromIdentifiers.length > 0) return fromIdentifiers;
-  return data.cve_id ? [data.cve_id] : [];
+  const cveIds = fromIdentifiers.length > 0 ? fromIdentifiers : data.cve_id ? [data.cve_id] : [];
+  // epss は REST 応答に同梱されるが octokit の型（plugin-rest-endpoint-methods）が
+  // 未反映のため局所的に型を補う（openapi-types には security-advisory-epss として存在）。
+  const epss = (data as { epss?: { percentage?: number | null } | null }).epss;
+  const pct = epss?.percentage;
+  const githubEpss = typeof pct === 'number' && Number.isFinite(pct) ? pct : null;
+  return { cveIds, githubEpss };
 }
 
 /** CVE 群の EPSS を FIRST API から取得。空は {}、失敗は throw（per-vuln フォールバックに委ねる）。 */
@@ -47,7 +56,7 @@ async function main(): Promise<void> {
   // octokit は 1 インスタンス生成し、client と EPSS の両方で共用する。
   const octokit = github.getOctokit(core.getInput('github-token'));
   const epssDeps: EpssDeps = {
-    getCveIds: (ghsaId) => getCveIds(octokit, ghsaId),
+    getAdvisory: (ghsaId) => getAdvisory(octokit, ghsaId),
     fetchEpss,
   };
 
