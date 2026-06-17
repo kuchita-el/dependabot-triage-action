@@ -35,9 +35,20 @@ jobs:
       - name: Setup toolchain (mise → Node 24)
         uses: jdx/mise-action@v2
 
+      # ~/.npm をキャッシュし、コールドインストールの遅延と registry 一時障害の影響を緩和する。
+      # synchronize 連打で run が反復してもキャッシュヒット時は registry 非依存で着手できる。
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
+      # --prefer-offline でキャッシュ優先（registry 障害耐性）、--no-audit で着手を速める。
       - name: Build action (npm ci → ncc)
         run: |
-          npm ci
+          npm ci --prefer-offline --no-audit
           npm run build
 
       # alert-lookup は GITHUB_TOKEN では読めないため PAT を使う。

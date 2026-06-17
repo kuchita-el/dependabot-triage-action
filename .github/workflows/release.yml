@@ -9,6 +9,13 @@ on:
   push:
     tags: ['v*.*.*']
 
+# 同一タグの再 run／近接 push で build→force-push が並走するとタグ参照がレースする。
+# 単一 run 内の冪等チェック（git diff --cached）では並走 run 間の競合を防げないため直列化する。
+# リリースは中断したくないので cancel-in-progress は false。
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 # タグを dist 入り commit へ付け替えて push するため contents: write が要る。
 permissions:
   contents: write
