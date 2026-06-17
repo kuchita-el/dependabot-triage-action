@@ -64,7 +64,8 @@ jobs:
 
       - name: Triage
         id: triage
-        uses: kuchita-el/dependabot-triage-action@v1
+        # 不変な固定バージョンを参照する（推奨）。更新は Dependabot に任せる（下記「配布とバージョン参照」）
+        uses: kuchita-el/dependabot-triage-action@v1.0.0
         with:
           github-token: ${{ secrets.DEPENDABOT_TRIAGE_PAT }}
           dependency-names: ${{ steps.meta.outputs.dependency-names }}
@@ -74,6 +75,30 @@ jobs:
           new-version: ${{ steps.meta.outputs.new-version }}
           dependency-group: ${{ steps.meta.outputs.dependency-group }}
 ```
+
+## 配布とバージョン参照
+
+本 Action は **immutable releases（不変リリース）** で配布する。`vX.Y.Z` は Release 発行時に commit へ固定（不変化）され、一度参照した版の中身は後から変わらない。consumer は**固定バージョン参照**を推奨する。
+
+```yaml
+# 不変な固定バージョン参照（推奨）
+uses: kuchita-el/dependabot-triage-action@v1.0.0
+```
+
+更新は Dependabot に任せる。consumer 側の `.github/dependabot.yml` に `github-actions` エコシステムを設定すると、新バージョン公開時に参照を更新する PR が自動で立つ。
+
+```yaml
+# .github/dependabot.yml
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+```
+
+> [!NOTE]
+> floating `v1`（最新の互換版を指す可動タグ）も併存するが、不変性は担保されない。再現性のため固定参照を推奨する。配布モデルの詳細は [docs/release.md](docs/release.md)。
 
 ## inputs
 
