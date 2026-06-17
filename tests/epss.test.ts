@@ -66,6 +66,19 @@ describe('enrichWithEpss', () => {
     expect(fetchEpss).toHaveBeenCalledTimes(1);
   });
 
+  it('A案: CVE 未割当でも GitHub epss が有限なら採用（cveIds=[] かつ epssAvailable=true）', async () => {
+    const fetchEpss = vi.fn().mockResolvedValue({});
+    const deps: EpssDeps = {
+      getAdvisory: vi.fn().mockResolvedValue({ cveIds: [], githubEpss: 0.12 }),
+      fetchEpss,
+    };
+    const [v] = await enrichWithEpss([vuln('GHSA-1')], deps);
+    expect(v!.epss).toBe(0.12);
+    expect(v!.epssAvailable).toBe(true);
+    expect(v!.cveIds).toEqual([]); // CVE 欄は「—」、EPSS 欄は数値で独立表示
+    expect(fetchEpss).not.toHaveBeenCalled();
+  });
+
   it('AC4: CVE 未割当（githubEpss=null かつ cveIds=[]）は epss=0 / epssAvailable=false', async () => {
     const fetchEpss = vi.fn().mockResolvedValue({});
     const deps: EpssDeps = {

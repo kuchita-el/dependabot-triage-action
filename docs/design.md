@@ -77,6 +77,8 @@ EPSS の取得経路として 3 案を比較し、**A 案（GitHub 優先 + FIRS
 
 **集約セマンティクス**: GitHub `epss` は advisory（GHSA）単位で 1 値、FIRST は CVE 単位。A 案では **「GitHub 値があれば優先（advisory 単位 1 値、GitHub が畳み済み）、無ければ FIRST の複数 CVE max（既存）」** とする。CVSS も `getGlobalAdvisory` の GHSA 単位で取得しており、EPSS を GitHub 値優先にすることで両指標の取得粒度が GHSA 単位で揃う。複数 CVE を持つ GHSA の EPSS 累積評価（noisy-OR 等）は別の設計判断として本対応では扱わない（別 Issue）。
 
+GitHub `epss` を採用した行は **CVE の有無に依存せず `epssAvailable=true`**（advisory 単位の値であり、CVE 未割当でも epss が同梱されていれば採用する）。これは PR#44 の「CVE 未割当**かつ** epss なし → `epssAvailable=false`」とは別ケースであり矛盾しない。コメント表示は CVE 欄（`cveIds`）と EPSS 欄（`epssAvailable`）を独立に出し分けるため、`cveIds=[]` かつ EPSS 数値ありの行も整合して表示される。
+
 ## 突合（F2 / M2 の肝） — 強度「緩」
 
 ```
