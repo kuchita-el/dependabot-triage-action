@@ -38,9 +38,11 @@ floating `v1` は廃止せず **併存** する。GitHub Release に紐づかな
    3. dist を焼き込んだ commit を作る（`dist/` は VCS 管理外のため `-f` で強制ステージング。commit は main へ戻さずタグ経由でのみ到達可能）。
    4. その commit に `vX.Y.Z` タグを **新規** 作成して push する（force-update しない）。
    5. `gh release create` で GitHub Release を発行する → 有効化済みならタグが commit に固定（不変化）。
-   6. floating major タグ（例 `v1`）を本リリース commit へ自動移動する（Release 非紐づけの可動タグのため force-update 可）。
+   6. floating major タグ（例 `v1`）を本リリース commit へ自動移動する（Release 非紐づけの可動タグのため force-update 可）。`move_major_tag` 入力（既定 true）で制御。
 
-> floating major の自動移動は「今リリースした commit」を指す前進リリース運用が前提。古いマイナー/パッチ系列への後追いリリースでは major を巻き戻すため、その場合は当該ステップを使わず手動判断する。
+> floating major の自動移動は「今リリースした commit」を指す前進リリース運用が前提。古いマイナー/パッチ系列への後追いリリースでは major を巻き戻すため、起動時に `move_major_tag=false` を指定してスキップする（release.yml の編集は不要）。
+>
+> floating major の force-update が機構として許容される前提（immutable releases は Release 紐づきタグのみを個別に保護し、`v*` パターン保護ではない）は、リポジトリの ruleset に `v*` タグルールが無いこと・AC1 の reject が `refs/tags/v1.2.0` 個別スコープだったことで裏取り済み。実地の最終確認は次回リリース（major 移動が green に通ること）で取る。
 
 > dist はタグの commit に含めるため、Release アセットは添付しない。「draft 作成 → アセット添付 → publish」の推奨フローはバイナリ等のアセットを伴う場合の手順であり、本 Action では不要。
 

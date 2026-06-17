@@ -18,6 +18,11 @@ on:
         description: 'リリース版（vX.Y.Z 形式。例: v1.2.3）'
         required: true
         type: string
+      move_major_tag:
+        description: 'floating major タグ（例 v1）を本リリース commit へ移動するか。古い系列への後追いリリース時は false（major の巻き戻し回避）'
+        required: false
+        default: true
+        type: boolean
 
 # 同一 version の多重起動で commit→tag→release が並走するとタグ参照がレースする。
 # リリースは中断したくないので cancel-in-progress は false。
@@ -91,8 +96,9 @@ jobs:
       # floating major タグ（例 v1）を本リリース commit へ移動する。HEAD は dist 焼込み commit。
       # Release に紐づかない可動タグのため force-update してよい（immutable 対象外）。
       # 前提: 常に「今リリースした commit」を指す前進リリース運用。古いマイナー/パッチ系列への
-      # 後追いリリースでは major を巻き戻すため、その場合はこのステップを使わない（手動判断）。
+      # 後追いリリースでは major を巻き戻すため、起動時に move_major_tag=false でスキップする。
       - name: Move floating major tag
+        if: ${{ inputs.move_major_tag }}
         env:
           VERSION: ${{ inputs.version }}
         run: |
