@@ -5,10 +5,11 @@ name: Release (immutable vX.Y.Z)
 #   2. dist を焼き込んだ commit を生成（dist/ は VCS 管理外のため -f で強制ステージング）
 #   3. その commit に release 固有タグ vX.Y.Z を「新規」作成して push（force-update しない）
 #   4. そのタグに GitHub Release を発行 → Immutable Releases 有効時はタグが commit に固定（不変化）
+#   5. floating major タグ（例 v1）を本リリース commit へ移動（利便用・可動）
 #
 # 旧実装（タグ push をトリガに公開済みタグを git push -f で付け替え）は immutability と
-# 両立しないため廃止した。公開後タグの force-update は一切行わない。
-# floating v1 の再ポイントは従来どおり人手（本 workflow 後に焼込み済み commit を指すよう移動）。
+# 両立しないため廃止した。release 固有タグ vX.Y.Z の force-update は一切行わない
+# （floating major タグは Release 非紐づけの可動タグなので force-update してよい）。
 # Immutable Releases の有効化手順・検証手順は docs/release.md を参照。
 on:
   workflow_dispatch:
@@ -86,3 +87,15 @@ jobs:
             --title "${VERSION}" \
             --verify-tag \
             --generate-notes
+
+      # floating major タグ（例 v1）を本リリース commit へ移動する。HEAD は dist 焼込み commit。
+      # Release に紐づかない可動タグのため force-update してよい（immutable 対象外）。
+      # 前提: 常に「今リリースした commit」を指す前進リリース運用。古いマイナー/パッチ系列への
+      # 後追いリリースでは major を巻き戻すため、その場合はこのステップを使わない（手動判断）。
+      - name: Move floating major tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          MAJOR="${VERSION%%.*}"   # v1.2.0 → v1
+          git tag -f -a "${MAJOR}" -m "${VERSION}"
+          git push -f origin "refs/tags/${MAJOR}"

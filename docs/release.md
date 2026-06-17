@@ -16,7 +16,7 @@ floating `v1` は廃止せず **併存** する。GitHub Release に紐づかな
 | タグ | 種別 | 用途 |
 |---|---|---|
 | `vX.Y.Z` | immutable（Release 紐づき・固定） | consumer の不変参照用。推奨参照先 |
-| `v1` | movable（Release 紐づかない git タグ） | 利便用の version tag。最新の互換 commit を指すよう人手で移動 |
+| `v1` | movable（Release 紐づかない git タグ） | 利便用の version tag。リリースごとに workflow が最新 commit へ自動移動 |
 
 ## Immutable Releases の有効化
 
@@ -38,7 +38,9 @@ floating `v1` は廃止せず **併存** する。GitHub Release に紐づかな
    3. dist を焼き込んだ commit を作る（`dist/` は VCS 管理外のため `-f` で強制ステージング。commit は main へ戻さずタグ経由でのみ到達可能）。
    4. その commit に `vX.Y.Z` タグを **新規** 作成して push する（force-update しない）。
    5. `gh release create` で GitHub Release を発行する → 有効化済みならタグが commit に固定（不変化）。
-3. （任意・人手）floating `v1` を焼込み済み commit へ移動する。
+   6. floating major タグ（例 `v1`）を本リリース commit へ自動移動する（Release 非紐づけの可動タグのため force-update 可）。
+
+> floating major の自動移動は「今リリースした commit」を指す前進リリース運用が前提。古いマイナー/パッチ系列への後追いリリースでは major を巻き戻すため、その場合は当該ステップを使わず手動判断する。
 
 > dist はタグの commit に含めるため、Release アセットは添付しない。「draft 作成 → アセット添付 → publish」の推奨フローはバイナリ等のアセットを伴う場合の手順であり、本 Action では不要。
 
