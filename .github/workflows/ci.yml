@@ -33,12 +33,6 @@ jobs:
       - name: Test
         run: npm test
 
+      # ncc がバンドル可能かを検証する。dist/ は VCS 管理外のためコミット差分は確認しない。
       - name: Build (ncc)
         run: npm run build
-
-      - name: Verify dist/ is up to date
-        run: |
-          if ! git diff --exit-code dist/; then
-            echo "::error::dist/ がソースと一致しません。'npm run build' を実行してコミットしてください。"
-            exit 1
-          fi

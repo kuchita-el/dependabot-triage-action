@@ -1,0 +1,48 @@
+name: Release (bake dist into tag)
+
+# vX.Y.Z タグ作成時に dist を焼き込み、外部 consumer が uses: ...@vX.Y.Z で
+# 参照できる配布参照を生成する。dist/ は VCS 管理外（#47）のため、タグの commit を
+# checkout → ncc build → dist を commit → 同じタグを dist 入り commit へ force-update する。
+# 人手で dist を焼く手順は不要。floating v1 の再ポイントは従来通り人手で行う（本 workflow 後に
+# 焼込み済み commit を指すよう移動する。リリースモデル見直しは #48）。
+on:
+  push:
+    tags: ['v*.*.*']
+
+# タグを dist 入り commit へ付け替えて push するため contents: write が要る。
+permissions:
+  contents: write
+
+jobs:
+  bake-dist:
+    runs-on: ubuntu-latest
+    steps:
+      # トリガとなったタグの commit を checkout する。
+      - name: Checkout (tag)
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain (mise → Node 24)
+        uses: jdx/mise-action@v2
+
+      # src + package-lock から dist を決定的に再生成する。
+      - name: Build action (npm ci → ncc)
+        run: |
+          npm ci
+          npm run build
+
+      - name: Bake dist and re-point tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # dist/ は .gitignore 対象のため -f で強制ステージング。
+          git add -f dist
+          # 既に dist 焼込み済みのタグなら差分なし。冪等に終了する。
+          if git diff --cached --quiet; then
+            echo "dist は既に焼込み済み。再ポイント不要。"
+            exit 0
+          fi
+          git commit -m "build(release): bake dist for ${TAG}"
+          git tag -f "${TAG}"
+          git push -f origin "refs/tags/${TAG}"

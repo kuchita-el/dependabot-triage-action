@@ -26,9 +26,19 @@ jobs:
     if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
     steps:
       # ベース（main）を checkout する。pull_request_target の既定は base ref のため
-      # PR のコードは取得しない。uses: ./ は main の action.yml / dist を参照する。
+      # PR のコードは取得しない。後続の build / uses: ./ は main のソースのみを対象とする。
       - name: Checkout (base only)
         uses: actions/checkout@v4
+
+      # dist/ は VCS 管理外のため実行前にビルドする（最新 main ソースから生成）。
+      # ビルド対象は checkout 済みの main ソースのみで PR コードは含まない。
+      - name: Setup toolchain (mise → Node 24)
+        uses: jdx/mise-action@v2
+
+      - name: Build action (npm ci → ncc)
+        run: |
+          npm ci
+          npm run build
 
       # alert-lookup は GITHUB_TOKEN では読めないため PAT を使う。
       - name: Fetch Dependabot metadata

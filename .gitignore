@@ -6,7 +6,11 @@ coverage/
 *.lcov
 .vitest/
 
-# Build cache (NOTE: dist/ is committed — it is the bundled action output)
+# Build output（dist/ は VCS 管理外。self は triage.yml が実行時ビルド、
+# 外部 consumer はリリース workflow がタグへ焼き込む。詳細は #47）
+dist/
+
+# Build cache
 .tsbuildinfo
 *.tsbuildinfo
 
