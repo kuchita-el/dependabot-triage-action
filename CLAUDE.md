@@ -27,7 +27,7 @@ npx vitest run -t "ケース名の部分一致"
 CI（`.github/workflows/ci.yml`）は typecheck → lint → format:check → test → build を順に実行（build は ncc がバンドル可能かの検証のみ）。**`dist/` は VCS 管理外**（`.gitignore`）であり、人手でビルド・コミットしない。dist の供給は消費形態ごとに自動化されている（#47）:
 
 - **self-triage**: `triage.yml` が action 実行前に `npm ci && npm run build` し、最新 main ソースから生成した dist を `uses: ./` で実行する（実行時ビルド）。
-- **外部 consumer**: `release.yml` が vX.Y.Z タグ作成時に dist をビルドしタグへ焼き込む（`uses: ...@vX.Y.Z` が dist 入り参照を指す）。floating v1 の再ポイントは従来通り人手。
+- **外部 consumer**: `release.yml`（`workflow_dispatch` で version 指定・手動起動）が dist を焼き込んだ commit を生成 → その commit に新規タグ `vX.Y.Z` を付与 → GitHub Release を発行し immutable 化する（`uses: ...@vX.Y.Z` が dist 入り・不変参照を指す）。公開後タグの force-update は行わない（#48）。floating major タグ（v1）の再ポイントは同 workflow が自動実行（Release 非紐づけの可動タグ）。配布モデルの詳細は `docs/release.md`。
 
 `src/` 変更時に手動 build は不要（CI/triage/release が各々ビルドする）。ローカルで動作確認したい場合のみ `npm run build` する。
 
