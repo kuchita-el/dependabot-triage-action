@@ -40,7 +40,7 @@ jobs:
     steps:
       # 起動 ref（既定 main）の commit を checkout する。dist はここから生成する。
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       # version 形式を検証し、既存タグへの再リリースを早期に弾く（immutable は再付与不可）。
       - name: Validate version and ensure tag is new
@@ -57,7 +57,7 @@ jobs:
           fi
 
       - name: Setup toolchain (mise → Node 24)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac  # v2.4.4
 
       # src + package-lock から dist を決定的に再生成する。
       - name: Build action (npm ci → ncc)
