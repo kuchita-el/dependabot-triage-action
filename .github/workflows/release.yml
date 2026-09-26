@@ -40,7 +40,7 @@ jobs:
     steps:
       # 起動 ref（既定 main）の commit を checkout する。dist はここから生成する。
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # version 形式を検証し、既存タグへの再リリースを早期に弾く（immutable は再付与不可）。
       - name: Validate version and ensure tag is new
