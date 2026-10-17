@@ -57,7 +57,7 @@ jobs:
           fi
 
       - name: Setup toolchain (mise → Node 24)
-        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
 
       # src + package-lock から dist を決定的に再生成する。
       - name: Build action (npm ci → ncc)
